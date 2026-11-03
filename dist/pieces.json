@@ -321,30 +321,29 @@
   "pencils": true,
   "title": "Kubus",
   "nl": "Kubusstapeling",
-  "T": 16,
-  "still": 0.5,
-  "start": 0.3,
+  "T": 64,
+  "still": 0.6,
+  "start": 0.1,
   "aspects": [
    "4:5",
    "16:9",
    "1:1"
   ],
-  "math": "h(i,j) in 0..n, h(i,j) >= h(i+1,j), h(i,j) >= h(i,j+1); the hexagon n x n x n is tiled by 3n^2 rhombi; a flip of three rhombi adds or removes one cube",
-  "label": "An isometric stack of cubes in a corner, drawn as a pencil tiling of rhombi in three tones; cubes are added and removed one at a time so the heap grows, collapses and builds towers and canyons.",
+  "math": "h(i,j) in 0..24, h(i,j) >= h(i+1,j), h(i,j) >= h(i,j+1); each visible face is a rhombus of the lozenge tiling; a flip of three rhombi adds one cube; hatching is dyadic, level l adds the lines at odd multiples of 2^-(l+1)",
+  "label": "A heap of isometric cubes drawn in pencil, three tones of hatching on the three face directions; cubes are only added, one at a time, and the view pulls back so the growing heap, with its terraces and towers, stays in frame.",
   "params": {
-   "n": 4,
-   "pitch": 0.0078
+   "construction": 0
   },
   "file": "v08-kubus.html",
   "module": "v08-kubus.mjs",
-  "bytes": 29927
+  "bytes": 28242
  },
  {
   "id": "v10-driehoek",
   "pencils": true,
   "title": "Onmogelijke driehoek",
   "nl": "Onmogelijke driehoek",
-  "T": 16,
+  "T": 64,
   "still": 0.2,
   "start": 0.1,
   "aspects": [
@@ -353,12 +352,13 @@
    "1:1"
   ],
   "math": "cells (0,0) -> (n,0) -> (n,n) -> (0,0) with (a,b) = (x - z, y - z): rows along x, y and z close in the picture, not in space; the paint order x + y + z has to break once",
-  "label": "The impossible triangle drawn as a pencil tiling of cubes in three tones; bands of light, mid and dark tone run round the loop one way for ever, cube by cube.",
+  "label": "The impossible triangle drawn as a pencil tiling of cubes in three tones; a wave of hatch density runs round the loop one way for ever, from bare to crosshatched, while the whole drawing turns slowly.",
   "params": {
-   "n": 7
+   "n": 7,
+   "construction": 0
   },
   "file": "v10-driehoek.html",
   "module": "v10-driehoek.mjs",
-  "bytes": 23968
+  "bytes": 24431
  }
 ]
