@@ -21,7 +21,7 @@
   },
   "file": "f01-schotter.html",
   "module": "f01-schotter.mjs",
-  "bytes": 23880
+  "bytes": 23939
  },
  {
   "id": "f02-ruled-disorder",
@@ -47,7 +47,7 @@
   },
   "file": "f02-ruled-disorder.html",
   "module": "f02-ruled-disorder.mjs",
-  "bytes": 23437
+  "bytes": 23496
  },
  {
   "id": "f03-trames",
@@ -70,7 +70,7 @@
   },
   "file": "f03-trames.html",
   "module": "f03-trames.mjs",
-  "bytes": 21267
+  "bytes": 21326
  },
  {
   "id": "f04-tesseract",
@@ -92,7 +92,7 @@
   },
   "file": "f04-tesseract.html",
   "module": "f04-tesseract.mjs",
-  "bytes": 22195
+  "bytes": 22254
  },
  {
   "id": "f05-hairline-flow",
@@ -119,7 +119,7 @@
   },
   "file": "f05-hairline-flow.html",
   "module": "f05-hairline-flow.mjs",
-  "bytes": 25197
+  "bytes": 25256
  },
  {
   "id": "f06-ribbon-sheaf",
@@ -142,7 +142,7 @@
   },
   "file": "f06-ribbon-sheaf.html",
   "module": "f06-ribbon-sheaf.mjs",
-  "bytes": 22203
+  "bytes": 22262
  },
  {
   "id": "f08-iso-bands",
@@ -166,7 +166,7 @@
   },
   "file": "f08-iso-bands.html",
   "module": "f08-iso-bands.mjs",
-  "bytes": 24367
+  "bytes": 24426
  },
  {
   "id": "f09-glyph-tiling",
@@ -191,30 +191,31 @@
   },
   "file": "f09-glyph-tiling.html",
   "module": "f09-glyph-tiling.mjs",
-  "bytes": 23574
+  "bytes": 23633
  },
  {
   "id": "f10-pegs-string",
   "title": "Pegs and string",
-  "T": 16,
+  "T": 64,
+  "speed": 0.8,
   "start": 0.25,
-  "still": 0.3,
+  "still": 0.12,
   "aspects": [
    "4:5",
    "16:9",
    "1:1"
   ],
-  "label": "One long thin string wrapped peg to peg around the border of a lattice of pegs, drawing curved envelopes that slowly ripple as its far ends slide along the ring.",
+  "math": "chord from peg i to peg (k * i) mod N for every peg i; k sweeps continuously from 2 up to 2 + range and back, lingering near whole numbers (cardioid at 2, nephroid at 3, then 3, 4 and 5 cusps)",
+  "label": "Pegs on a ring, each joined by a straight thin string to the peg at k times its number, while k sweeps slowly so the glowing envelope curves (cardioid, nephroid and more) bloom and fold into one another.",
   "params": {
-   "across": 25,
-   "ring": 120,
-   "mult": 3,
-   "spread": 0.2,
-   "wrap": 0.0028
+   "ring": 200,
+   "range": 1,
+   "linger": 0.6,
+   "offset": 0.035
   },
   "file": "f10-pegs-string.html",
   "module": "f10-pegs-string.mjs",
-  "bytes": 23402
+  "bytes": 21383
  },
  {
   "id": "f12-metamorphosis",
@@ -239,12 +240,13 @@
   },
   "file": "f12-metamorphosis.html",
   "module": "f12-metamorphosis.mjs",
-  "bytes": 23541
+  "bytes": 23600
  },
  {
   "id": "m01-harmonograph",
   "title": "Harmonograph",
   "T": 16,
+  "speed": 0.6,
   "still": 0.5,
   "start": 0.3,
   "aspects": [
@@ -252,15 +254,15 @@
    "16:9",
    "1:1"
   ],
-  "math": "x(t) = Σ A_i sin(f_i t + φ_i) e^(-d_i t), y(t) likewise; f_i = a_i N + e_i integers (e.g. 3 : 2 plus a small detune), one closed period, amplitudes modulated",
-  "label": "A pen traced by damped pendulums: near-integer frequency ratios make a decaying spiral whose ink gathers where the path retraces.",
+  "math": "x(u) = Σ A_i sin(f_i u + φ_i) m_i(u), y(u) likewise; f_i = a_i N + e_i integers, m_i(u) = 0.55 + 0.45 cos(k_i u + ψ_i), u in [0, 2π]",
+  "label": "One closed pen path from four pendulums with near-integer frequency ratios; a periodic amplitude envelope winds the spiral in and out and the ink gathers where the path retraces.",
   "params": {
    "segs": 9000,
    "alpha": 0.42
   },
   "file": "m01-harmonograph.html",
   "module": "m01-harmonograph.mjs",
-  "bytes": 22015
+  "bytes": 22448
  },
  {
   "id": "m02-clifford",
@@ -275,15 +277,15 @@
    "1:1"
   ],
   "math": "x' = sin(a y) + c cos(a x),  y' = sin(b x) + d cos(b y);  (a, b) walk a small circle",
-  "label": "A fixed lattice of points pushed through the Clifford map eight times lands on a folded filigree; the parameters walk a small circle so the cloud unfolds and refolds, with a second, smaller attractor in the cool colour.",
+  "label": "A swarm of particles hopping along a Clifford attractor, each leaving a short comet trail, while the map parameters walk a small circle so the filigree unfolds and refolds; a second, smaller attractor streams beside it.",
   "params": {
-   "seeds": 8000,
+   "seeds": 6500,
    "eps": 0.07,
    "dwell": 50
   },
   "file": "m02-clifford.html",
   "module": "m02-clifford.mjs",
-  "bytes": 25806
+  "bytes": 24552
  },
  {
   "id": "m03-epicycles",
@@ -297,7 +299,7 @@
    "1:1"
   ],
   "math": "z(s) = Σ c_k e^(i k s), twelve integer k, |c_k| ~ 1/|k|^1.2",
-  "label": "Twelve circles turning on each other: the last point of the chain draws a closed curve, and the circles slowly grow and fade so the curve keeps changing.",
+  "label": "A field of epicycle machines of many sizes: each chain of turning circles draws its own closed curve, and the circles slowly swell and fade so the curves keep changing.",
   "params": {
    "terms": 12,
    "decay": 1.2,
@@ -305,7 +307,7 @@
   },
   "file": "m03-epicycles.html",
   "module": "m03-epicycles.mjs",
-  "bytes": 22760
+  "bytes": 23362
  },
  {
   "id": "m04-chladni",
@@ -327,7 +329,7 @@
   },
   "file": "m04-chladni.html",
   "module": "m04-chladni.mjs",
-  "bytes": 23788
+  "bytes": 23847
  },
  {
   "id": "m05-phyllotaxis",
@@ -341,14 +343,13 @@
    "1:1"
   ],
   "math": "r = c sqrt(n),  phi = n (137.5078 deg + delta),  delta wanders by a few hundredths of a degree",
-  "label": "Two sunflower spirals of dots, one turning left and one right, whose divergence angle drifts a hair around the golden angle so the spiral arms sweep, merge and change count.",
+  "label": "One sunflower of halftone dots whose divergence angle drifts a hair around the golden angle, so the spiral arms sweep, merge and change count, with a faint echo of itself that makes a moire halo.",
   "params": {
-   "na": 1700,
-   "nb": 760
+   "na": 1300
   },
   "file": "m05-phyllotaxis.html",
   "module": "m05-phyllotaxis.mjs",
-  "bytes": 21370
+  "bytes": 21327
  },
  {
   "id": "m06-hyperbolic",
@@ -370,7 +371,7 @@
   },
   "file": "m06-hyperbolic.html",
   "module": "m06-hyperbolic.mjs",
-  "bytes": 29899
+  "bytes": 29958
  },
  {
   "id": "m07-apollonian",
@@ -391,7 +392,7 @@
   },
   "file": "m07-apollonian.html",
   "module": "m07-apollonian.mjs",
-  "bytes": 25071
+  "bytes": 25130
  },
  {
   "id": "m08-penrose",
@@ -415,7 +416,7 @@
   },
   "file": "m08-penrose.html",
   "module": "m08-penrose.mjs",
-  "bytes": 23840
+  "bytes": 23899
  },
  {
   "id": "m09-roulette",
@@ -437,6 +438,154 @@
   },
   "file": "m09-roulette.html",
   "module": "m09-roulette.mjs",
-  "bytes": 21754
+  "bytes": 21789
+ },
+ {
+  "id": "v01-liggende-acht",
+  "pencils": true,
+  "title": "Liggende acht",
+  "nl": "Liggende acht",
+  "T": 16,
+  "still": 0.5,
+  "start": 0.1,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "x = sin(a t + phi), y = sin(b t), a:b = 1:1, 1:2, 2:3, 3:4; neighbours blended coefficient by coefficient so the curve stays closed; ribbon = 3 copies offset by d along the normal, over/under alternating at the 2ab-a-b crossings",
+  "label": "The lying eight opens into a double loop, then a triple-loop knot and back: one closed Lissajous line drawn as a ribbon of three pencils that passes over and under itself at every crossing.",
+  "params": {
+   "d": 0.0135,
+   "seg": 440,
+   "cons": 1
+  },
+  "file": "v01-liggende-acht.html",
+  "module": "v01-liggende-acht.mjs",
+  "bytes": 29130
+ },
+ {
+  "id": "v02-knoop",
+  "pencils": true,
+  "title": "Knoop",
+  "nl": "Knoop",
+  "T": 16,
+  "still": 0.51,
+  "start": 0.01,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "x = (R + r cos qt) cos pt,  y = (R + r cos qt) sin pt,  z = r sin qt  (torus knot T(p,q); the trefoil is T(2,3))",
+  "label": "A torus knot drawn as a ribbon of three pencil lines turns slowly in space and melts from the trefoil into five-crossing and larger knots, with every crossing cut so the nearer strand passes over.",
+  "params": {
+   "pitch": 0.3,
+   "r": 0.5,
+   "spacing": 0.0125,
+   "gap": 0.0045,
+   "twist": 0.3,
+   "seg": 520
+  },
+  "file": "v02-knoop.html",
+  "module": "v02-knoop.mjs",
+  "bytes": 27792
+ },
+ {
+  "id": "v03-ritme",
+  "pencils": true,
+  "title": "Ritme",
+  "nl": "Ritme",
+  "T": 16,
+  "still": 0.3,
+  "start": 0.3,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "x = t - a sin t, y = -a cos t; a = 0 line, a < 1 wave, a = 1 cusp, a > 1 loops (self-crossing at t = +-t*, t* = a sin t*); a grows by row from 0 to 1.8",
+  "label": "Rows of one curve, the trochoid, drawn as three-pencil ribbons: a straight line at the top turns into a wave, then a cusp, then loops that tighten row by row, and the whole sheet slowly breathes and flows.",
+  "params": {
+   "rows": 9,
+   "amax": 1.6,
+   "d": 0.0055,
+   "ppp": 56
+  },
+  "file": "v03-ritme.html",
+  "module": "v03-ritme.mjs",
+  "bytes": 23621
+ },
+ {
+  "id": "v04-vlecht",
+  "pencils": true,
+  "title": "Vlecht",
+  "nl": "Vlecht",
+  "T": 16,
+  "still": 0.2,
+  "start": 0.1,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "strand k: angle t, radius R + r sin(m(t + 2πk/n) + φ), n strands; over where dρ/dt is larger",
+  "label": "Strands in coloured pencil plait themselves round a ring; the waves drift between two numbers of humps, so the weave keeps changing its pattern while every crossing is cut with the nearer strand over.",
+  "params": {
+   "n": 0,
+   "r": 0.3,
+   "spacing": 0.0105,
+   "gap": 0.0075,
+   "seg": 400
+  },
+  "file": "v04-vlecht.html",
+  "module": "v04-vlecht.mjs",
+  "bytes": 24887
+ },
+ {
+  "id": "v05-roos",
+  "pencils": true,
+  "title": "Roos",
+  "nl": "Roos",
+  "T": 16,
+  "still": 0.3,
+  "start": 0.2,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "r = cos(k t), t in [0, 4 pi), k = p/q in {5/2, 4}, blended in polar form r = (1-L) r_a + L r_b; copy j: scale 1 - j h, turn j d, petal exponent 1 + j/20",
+  "label": "One rose r = cos(kt) drawn as twelve nested pencil copies that fan out like a shaded lotus, while k slides between rational values.",
+  "params": {
+   "copies": 12,
+   "size": 0.42
+  },
+  "file": "v05-roos.html",
+  "module": "v05-roos.mjs",
+  "bytes": 20597
+ },
+ {
+  "id": "v06-rhombenring",
+  "pencils": true,
+  "title": "Rhombenring",
+  "nl": "Rhombenring",
+  "T": 12,
+  "still": 0.4,
+  "start": 0.3,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "tile(a,b) = s u_a + t u_b, u_k = (cos(pi k/n), sin(pi k/n)); ring = Z(2,...,2) minus a centred hole; tone = Lambert shade of the lifted facet E_a x E_b",
+  "label": "A ring of rhombi hatched in three pencil tones by tile orientation so it reads as a twisted band; the tones turn round it and hexagons of three tiles flip.",
+  "params": {
+   "n": 0,
+   "pitch": 0.009
+  },
+  "file": "v06-rhombenring.html",
+  "module": "v06-rhombenring.mjs",
+  "bytes": 30644
  }
 ]

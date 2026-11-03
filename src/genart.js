@@ -106,7 +106,7 @@ function paper(g) {
   const cv = document.createElement('canvas'); cv.width = g.w; cv.height = g.h;
   const ctx = cv.getContext('2d'), r = g.rng('dust'), n = (r() * 41) | 0;
   ctx.fillStyle = g.c.paper; ctx.fillRect(0, 0, g.w, g.h); ctx.fillStyle = g.c.ink;
-  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.3 + 0.4 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0004 + 0.0008 * r()), 0, 7); ctx.fill(); }
+  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.15 + 0.25 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0003 + 0.0002 * r()), 0, 7); ctx.fill(); } // owner: large dark specks must go: tiny and faint only
   const k0 = Math.max(1, g.S / 1000); ctx.globalCompositeOperation = 'soft-light';
   [[241, 1, 0.10 * GK], [257, 3, 0.06 * GK]].forEach(([sz, m, a]) => {
     const p = ctx.createPattern(tile(sz, g.seed, 127), 'repeat'); p.setTransform(new DOMMatrix().scale(k0 * m));

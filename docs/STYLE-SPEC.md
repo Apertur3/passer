@@ -219,7 +219,8 @@ so tone holds at avatar size.
 - Grain size: about 1 px at 1000 px width; scale the pattern by `S/1000` with a minimum of 1
   device px.
 - Target: on a flat paper area, luminance standard deviation 2 to 5 (of 255).
-- Dust: 0 to 40 ink specks (radius 0.0004 to 0.0012 S, alpha 0.3 to 0.7), seeded, static.
+- Dust: 0 to 40 ink specks, tiny and faint only (radius 0.0003 to 0.0005 S, alpha 0.15 to 0.4),
+  seeded, static. The owner rejected larger dark specks as "spots on the canvas".
 - **Grain is static.** It belongs to the paper and does not shimmer. Ink marks get their own
   texture: per-stroke alpha 0.8 to 1.0 and width jitter ±10%, both seeded.
 

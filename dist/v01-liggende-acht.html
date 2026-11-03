@@ -1,0 +1,372 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Liggende acht</title>
+<style>html,body{margin:0;height:100%}body{display:grid;place-items:center;overflow:hidden}</style>
+<script type="module">
+// genart.js: shared helpers for every piece. Plain ES module, no dependencies.
+// Built into each piece's dist file by scripts/build.mjs (exports are stripped there).
+
+// ---- themes ---------------------------------------------------------------
+const THEMES = {
+  mono: { paper: '#E4E2DD', ink: '#1B1A18' },
+  fieldnotes: { paper: '#E9E8E3', ink: '#141518', accent: '#A8521F', cool: '#3F6688', third: '#3D8A6E' },
+  night: { paper: '#121316', ink: '#EAE7E0', accent: '#D98552', cool: '#8FB0CF', third: '#6CC0A0' },
+};
+const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => '#' + rgb(a).map((v, i) => Math.round(v + (rgb(b)[i] - v) * k).toString(16).padStart(2, '0')).join('');
+function theme(name) {
+  const t = THEMES[name] || THEMES.mono;
+  return { paper: t.paper, ink: t.ink, accent: t.accent || t.ink, cool: t.cool || t.ink, third: t.third || t.ink,
+    tint1: mix(t.paper, t.ink, 0.35), tint2: mix(t.paper, t.ink, 0.12) };
+}
+
+// ---- prng: sfc32 seeded through cyrb128 ------------------------------------
+function cyrb128(s) {
+  let a = 1779033703, b = 3144134277, c = 1013904242, d = 2773480762;
+  for (let i = 0, k; i < s.length; i++) {
+    k = s.charCodeAt(i);
+    a = b ^ Math.imul(a ^ k, 597399067); b = c ^ Math.imul(b ^ k, 2869860233);
+    c = d ^ Math.imul(c ^ k, 951274213); d = a ^ Math.imul(d ^ k, 2716044179);
+  }
+  a = Math.imul(c ^ (a >>> 18), 597399067); b = Math.imul(d ^ (b >>> 22), 2869860233);
+  c = Math.imul(a ^ (c >>> 17), 951274213); d = Math.imul(b ^ (d >>> 19), 2716044179);
+  return [(a ^ b ^ c ^ d) >>> 0, (b ^ a) >>> 0, (c ^ a) >>> 0, (d ^ a) >>> 0];
+}
+function sfc32(a, b, c, d) {
+  return () => {
+    a |= 0; b |= 0; c |= 0; d |= 0;
+    const t = (((a + b) | 0) + d) | 0;
+    d = (d + 1) | 0; a = b ^ (b >>> 9); b = (c + (c << 3)) | 0; c = (c << 21) | (c >>> 11); c = (c + t) | 0;
+    return (t >>> 0) / 4294967296;
+  };
+}
+function prng(seed) { const r = sfc32(...cyrb128(String(seed))); for (let i = 0; i < 12; i++) r(); return r; }
+
+// ---- noise: simplex 4D, loop noise ----------------------------------------
+const PERM = new Uint8Array(512), GRAD = [];
+{ const r = prng('genart-noise'), a = [...Array(256).keys()];
+  for (let i = 255; i > 0; i--) { const j = (r() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+  for (let i = 0; i < 512; i++) PERM[i] = a[i & 255];
+  for (let z = 0; z < 4; z++) for (const p of [-1, 1]) for (const q of [-1, 1]) for (const s of [-1, 1]) { const v = [p, q, s]; v.splice(z, 0, 0); GRAD.push(v); } }
+const F4 = (Math.sqrt(5) - 1) / 4, G4 = (5 - Math.sqrt(5)) / 20;
+function noise4(x, y, z, w) { // about [-1, 1]
+  const s = (x + y + z + w) * F4, c0 = [x, y, z, w].map(v => Math.floor(v + s)), t = (c0[0] + c0[1] + c0[2] + c0[3]) * G4;
+  const X = [x, y, z, w].map((v, i) => v - (c0[i] - t)), rk = [0, 0, 0, 0];
+  for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) X[a] > X[b] ? rk[a]++ : rk[b]++;
+  let n = 0;
+  for (let c = 0; c < 5; c++) {
+    const o = rk.map(v => (c && v >= 4 - c ? 1 : 0)), d = X.map((v, i) => v - o[i] + c * G4);
+    const u = 0.6 - d[0] * d[0] - d[1] * d[1] - d[2] * d[2] - d[3] * d[3];
+    if (u > 0) {
+      const P = (i) => PERM[i & 255], gv = GRAD[P(c0[0] + o[0] + P(c0[1] + o[1] + P(c0[2] + o[2] + P(c0[3] + o[3])))) & 31];
+      n += u * u * u * u * (gv[0] * d[0] + gv[1] * d[1] + gv[2] * d[2] + gv[3] * d[3]);
+    }
+  }
+  return 27 * n;
+}
+const loopNoise = (x, y, th, r) => noise4(x, y, r * Math.cos(th), r * Math.sin(th));
+
+// ---- easing: only these two are allowed ----------------------------------
+const cl = u => Math.min(1, Math.max(0, u));
+const ease = {
+  sine: u => 0.5 - 0.5 * Math.cos(Math.PI * cl(u)),
+  smoother: u => { u = cl(u); return u * u * u * (u * (u * 6 - 15) + 10); },
+  // tempo curve, no rests: a phase that runs between 0.5x and 1.5x of the average speed and never stops
+  rest: p => p + Math.sin(2 * Math.PI * p) / (4 * Math.PI),
+  // breathing amplitude 0..1 over one loop (cosine of the tempo-varied phase)
+  breath: p => 0.5 - 0.5 * Math.cos(2 * Math.PI * ease.rest(p)),
+};
+
+// ---- frame: unit transform, paper, line weights ---------------------------
+const LW = { hair: 0.0006, fine: 0.0012, line: 0.0025, bold: 0.006, mass: 0.02 };
+function frame(ctx, { w, h, seed = 1, theme: tn = 'mono', q = 1 }) {
+  const S = Math.min(w, h), aspect = Math.max(w, h) / S, c = theme(tn), m = aspect > 1.5 ? 0.06 : 0.08;
+  const hw = w / S / 2, hh = h / S / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = c.paper; ctx.fillRect(0, 0, w, h);
+  ctx.setTransform(S, 0, 0, S, w / 2, h / 2); ctx.lineCap = ctx.lineJoin = 'round';
+  const lw = n => Math.max(LW[n], 0.75 / S);
+  // g.q: quality factor in (0, 1]. 1 in tests, exports and ?t= frames; mount's governor lowers it on slow devices.
+  // Heavy pieces multiply their element counts (segments, particles, dots) by g.q, rounding up to at least a sensible minimum.
+  return { S, aspect, w, h, hw, hh, m, bx: hw - m, by: hh - m, c, seed, lw, q,
+    // pen: set stroke width (floored at 0.75 device px, alpha scaled to keep tone), alpha and colour
+    pen(ctx, n, a = 1, col = c.ink) { ctx.lineWidth = lw(n); ctx.globalAlpha = a * Math.min(1, LW[n] / lw(n)); ctx.strokeStyle = col; },
+    rng: salt => prng(seed + ':' + (salt || '')), noise4, ease };
+}
+
+// ---- paper: two static grain tiles + dust (spec: grain; baked under the marks for speed) ----
+const TILES = {}, GK = 2.6; // GK scales the spec alphas: soft-light on bright paper is weak, this lands at std 2 to 5
+function tile(n, seed, amp) {
+  const k = n + seed; if (TILES[k]) return TILES[k];
+  const cv = document.createElement('canvas'); cv.width = cv.height = n;
+  const x = cv.getContext('2d'), im = x.createImageData(n, n), r = prng('grain' + k);
+  for (let i = 0; i < n * n; i++) im.data.set([0, 0, 0, 255].fill(128 + (r() * 2 - 1) * amp, 0, 3), i * 4);
+  x.putImageData(im, 0, 0); return (TILES[k] = cv);
+}
+// The paper (fill, dust, grain) is static, so it is built once per (seed, size, theme) and blitted each frame.
+const PAPER = new Map();
+function paper(g) {
+  const k = [g.seed, g.w, g.h, g.c.paper].join('|');
+  if (PAPER.has(k)) return PAPER.get(k);
+  const cv = document.createElement('canvas'); cv.width = g.w; cv.height = g.h;
+  const ctx = cv.getContext('2d'), r = g.rng('dust'), n = (r() * 41) | 0;
+  ctx.fillStyle = g.c.paper; ctx.fillRect(0, 0, g.w, g.h); ctx.fillStyle = g.c.ink;
+  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.15 + 0.25 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0003 + 0.0002 * r()), 0, 7); ctx.fill(); } // owner: large dark specks must go: tiny and faint only
+  const k0 = Math.max(1, g.S / 1000); ctx.globalCompositeOperation = 'soft-light';
+  [[241, 1, 0.10 * GK], [257, 3, 0.06 * GK]].forEach(([sz, m, a]) => {
+    const p = ctx.createPattern(tile(sz, g.seed, 127), 'repeat'); p.setTransform(new DOMMatrix().scale(k0 * m));
+    ctx.globalAlpha = a; ctx.fillStyle = p; ctx.fillRect(0, 0, g.w, g.h);
+  });
+  if (PAPER.size > 6) PAPER.delete(PAPER.keys().next().value);
+  PAPER.set(k, cv); return cv;
+}
+
+// ---- render: the one place that turns (piece, seed, t, size, theme) into pixels ---
+function render(piece, ctx, o) {
+  const g = setup(piece, ctx, o);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(paper(g), 0, 0); ctx.restore();
+  piece.draw(ctx, { seed: o.seed, t: o.t, w: o.w, h: o.h, g });
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+}
+// setup: the frame helper plus phase, noise and live-mode helpers (also used headless by scripts/motion.mjs)
+function setup(piece, ctx, o) {
+  const g = frame(ctx, o), T = piece.meta.T;
+  g.params = { ...piece.meta.params, ...o.params };
+  g.T = T; g.p = (((o.t / T) % 1) + 1) % 1; g.theta = 2 * Math.PI * g.p;
+  g.thetaR = 2 * Math.PI * ease.rest(g.p); // theta with varying tempo (0.5x..1.5x), never stops
+  // Live mode (mount default; exports, ?t= frames, tests and ?loop=1 stay in loop mode, where drift = 0 and everything closes at T):
+  //  g.live   true in live mode.
+  //  g.drift  unbounded slow time in seconds (page clock); 0 in loop mode. Use it for slow envelopes that should never recur.
+  //  g.voice(k) loop mode: k * theta (integer k >= 1, closes). Live: 2*pi*(t/T)*(k + eps_k) unwrapped, with small detunes so
+  //           voices slip against each other and the combination never repeats.
+  //  g.loop(x, y, r, th) loop noise; live: the sampling circle's centre wanders slowly through noise space, so fields never recur.
+  g.live = !!o.live; g.drift = g.live ? o.t : 0;
+  const EPS = [0, 0.0618, 0.1414, 0.0732, 0.0236, 0.1032, 0.0455, 0.0871];
+  g.voice = k => g.live ? 2 * Math.PI * (o.t / T) * (k + (EPS[k - 1] ?? ((k * 0.618034) % 1) * 0.1)) : k * g.theta;
+  const D = [0.37, 0.61, 0.43, 0.29].map(v => v * 0.03 * g.drift);
+  g.loop = (x, y, r, th = g.theta) => g.live ? noise4(x + D[0], y + D[1], r * Math.cos(th) + D[2], r * Math.sin(th) + D[3]) : loopNoise(x, y, th, r);
+  return g;
+}
+
+// ---- clock: rAF loop with pause and resume ------
+function clock(fn) {
+  let raf = 0;
+  const loop = ts => { raf = requestAnimationFrame(loop); fn(ts / 1000); };
+  return { start() { if (!raf) raf = requestAnimationFrame(loop); }, stop() { cancelAnimationFrame(raf); raf = 0; }, get running() { return !!raf; } };
+}
+
+// ---- mount: responsive, pauses offscreen, honours reduced motion -----------
+function mount(el, o) {
+  const { piece } = o, m = piece.meta, seed = o.seed ?? 1, tn = o.theme || 'mono';
+  const [aw, ah] = (o.aspect || m.aspects[0]).split(':').map(Number), ar = aw / ah;
+  const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+  cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', m.label);
+  cv.style.cssText = `display:block;border:0;background:${theme(tn).paper};` + (o.fit ? '' : `width:100%;aspect-ratio:${aw}/${ah}`);
+  el.appendChild(cv);
+  const inst = { canvas: cv, frames: 0, q: 1, qSteps: 0, drawMs: [], destroy }; // drawMs: cost of the last 600 live paints (draw+frame, CPU side)
+  const mql = matchMedia('(prefers-reduced-motion: reduce)'), reduced = () => (o.reduce ?? mql.matches);
+  let vis = true, lastT = 0, lastLive = false, sized = false, key = '';
+  const paint = (t, again, live) => { // static modes skip a repaint of an identical frame
+    const k = cv.width + 'x' + cv.height + ':' + t; if (!sized || (!again && k === key)) return; key = k; lastT = t; lastLive = live; render(piece, ctx, { seed, t, w: cv.width, h: cv.height, theme: tn, params: o.params, q: gov.q, live }); inst.frames++; };
+  // Quality governor (live clock only; never for exports or ?t= frames). Rolling mean over 30 frames of (a) the cost of
+  // draw+frame and (b) the rAF interval. Mean cost > 12 ms or interval > 22 ms: step g.q down one level of [1, .7, .5, .35].
+  // Mean cost < 6 ms and interval < 18 ms for 3 consecutive windows (90 frames): step back up one level.
+  const gov = { q: o.q ?? 1, target: o.q ?? 1, L: [1, 0.7, 0.5, 0.35], i: 0, n: 0, cost: 0, gap: 0, bad: 0, good: 0, last: 0, stepAt: 0 };
+  // Live clock ACCUMULATES: tAcc += clamp(dt, 0, 0.05) * speed, with dt from rAF timestamps and speed = inst.speed * meta.speed.
+  // Changing the speed never changes the phase (no jump), and a stall or a pause becomes a slight slowdown, never a visual jump.
+  // The live t (= tAcc, unbounded) starts at meta.start * T and feeds g.drift / g.voice.
+  inst.speed = o.speed ?? 1; let tAcc = (m.start ?? 0.25) * m.T, lastTs = 0;
+  // Quality governor (live clock only; never for exports or ?t= frames). Windows of 30 frames of (a) the cost of draw+frame and
+  // (b) the rAF interval. Down one level of [1, .7, .5, .35] after 2 consecutive overloaded windows, about 1 s (cost > 10 ms or interval > 22 ms);
+  // up after 3 consecutive good windows (cost < 5 ms and interval < 18 ms) and at least 5 s since the last step. g.q itself eases toward the
+  // target level (about 1 s), so element counts fade rather than pop.
+  const govern = (cost, now) => {
+    const gap = gov.last && now - gov.last < 100 ? now - gov.last : 0; gov.last = now;
+    gov.cost += cost; gov.gap += gap || 16;
+    if (o.q == null) gov.q += (gov.target - gov.q) * 0.06;
+    inst.q = gov.q;
+    if (++gov.n < 30) return;
+    const c = gov.cost / 30, d = gov.gap / 30; gov.n = gov.cost = gov.gap = 0;
+    const bad = c > 10 || d > 22, good = c < 5 && d < 18; gov.bad = bad ? gov.bad + 1 : 0; gov.good = good ? gov.good + 1 : 0;
+    if (gov.bad >= 2 && gov.i < 3 && now - gov.stepAt > 1500) { gov.i++; inst.qSteps++; gov.stepAt = now; gov.bad = 0; } else if (gov.good >= 3 && gov.i > 0 && now - gov.stepAt > 5000) { gov.i--; inst.qSteps++; gov.stepAt = now; gov.good = 0; }
+    gov.target = gov.L[gov.i];
+  };
+  const clk = clock(ts => {
+    const t0 = performance.now(); tAcc += Math.min(0.05, Math.max(0, lastTs ? ts - lastTs : 0)) * inst.speed * (m.speed ?? 1); lastTs = ts;
+    paint(tAcc, 1, !o.loop); const cost = performance.now() - t0; inst.drawMs.push(cost); if (inst.drawMs.length > 600) inst.drawMs.shift(); govern(cost, t0);
+  });
+  function update() {
+    if (o.t != null) { clk.stop(); paint(o.t); }
+    else if (reduced()) { clk.stop(); paint(m.still * m.T); }
+    else if (vis && !document.hidden) { if (!clk.running) lastTs = 0; clk.start(); } else clk.stop();
+    cv.dataset.state = clk.running ? 'running' : 'paused';
+  }
+  const ro = new ResizeObserver(([e]) => {
+    const { width, height } = e.contentRect; if (!width) return;
+    const cw = o.fit ? Math.min(width, height * ar) : width, ch = cw / ar;
+    if (o.fit) { cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; }
+    const liveMode = o.t == null && !reduced() && !o.loop, k = Math.min(devicePixelRatio || 1, liveMode ? (o.dprMax ?? m.dprMax ?? 2) : 2); // meta.dprMax: heavy pieces ask for DPR 1 in live mode
+    let pw = cw * k; if (pw * (pw / ar) > 2.5e6) pw = Math.sqrt(2.5e6 * ar);
+    const nw = Math.round(pw), nh = Math.round(pw / ar); if (cv.width === nw && cv.height === nh && sized) return; // no needless clear
+    cv.width = nw; cv.height = nh; sized = true; update(); if (lastT || !clk.running) paint(lastT, 0, lastLive); // repaint in the same task: no blank frame is ever composited
+  });
+  const io = new IntersectionObserver(es => { vis = es[es.length - 1].isIntersecting; update(); });
+  const onVis = () => update();
+  ro.observe(el); io.observe(cv); document.addEventListener('visibilitychange', onVis); mql.addEventListener('change', onVis);
+  function destroy() { clk.stop(); ro.disconnect(); io.disconnect(); document.removeEventListener('visibilitychange', onVis); mql.removeEventListener('change', onVis); cv.remove(); }
+  return inst;
+}
+
+// ---- exports ---------------------------------------------------------------
+function target(piece, o) {
+  const [aw, ah] = (o.aspect || piece.meta.aspects[0]).split(':').map(Number), [w, h] = String(o.size || 2000).split('x').map(Number);
+  return { w, h: h || Math.round(w * ah / aw) };
+}
+const canvasFor = (piece, o) => { const cv = document.createElement('canvas'); Object.assign(cv, target(piece, o)); return cv; };
+const opts = (piece, o, cv, t) => ({ seed: o.seed ?? 1, theme: o.theme || 'mono', params: o.params, w: cv.width, h: cv.height, t });
+const blobOf = (cv, type = 'image/png') => new Promise(r => cv.toBlob(r, type));
+function exportPNG(piece, o = {}) { // the reduced-motion frame, at full size
+  const cv = canvasFor(piece, o); render(piece, cv.getContext('2d'), opts(piece, o, cv, piece.meta.still * piece.meta.T)); return blobOf(cv);
+}
+async function exportWebm(piece, o = {}, fps = 30) { // one seamless loop, real-time capture
+  const cv = canvasFor(piece, o), ctx = cv.getContext('2d'), track = cv.captureStream(0).getVideoTracks()[0];
+  const rec = new MediaRecorder(new MediaStream([track]), { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 12e6 });
+  const parts = []; rec.ondataavailable = e => parts.push(e.data); rec.start();
+  for (let i = 0; i < piece.meta.T * fps; i++) { render(piece, ctx, opts(piece, o, cv, i / fps)); track.requestFrame(); await new Promise(r => setTimeout(r, 1000 / fps)); }
+  await new Promise(r => { rec.onstop = r; rec.stop(); }); return new Blob(parts, { type: 'video/webm' });
+}
+async function exportFrames(piece, o = {}, fps = 30) { // needs a user gesture for the folder picker
+  const dir = await showDirectoryPicker(), cv = canvasFor(piece, o), ctx = cv.getContext('2d');
+  for (let i = 0; i < piece.meta.T * fps; i++) {
+    render(piece, ctx, opts(piece, o, cv, i / fps));
+    const f = await (await dir.getFileHandle(`frame_${String(i).padStart(5, '0')}.png`, { create: true })).createWritable();
+    await f.write(await blobOf(cv)); await f.close();
+  }
+}
+function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e4); }
+
+// V01 Liggende acht (the lying eight and its metamorphosis, drawn as a three-pencil ribbon).
+// One rule: a closed Lissajous curve whose ratio a:b walks 1:1, 1:2, 2:3, 3:4 and back, blended in its Fourier description so it stays one closed line, drawn as a ribbon whose strands go over and under alternately at every crossing.
+const meta = {
+  id: 'v01-liggende-acht', pencils: true, title: 'Liggende acht', nl: 'Liggende acht', T: 16, still: 0.5, start: 0.1, aspects: ['4:5', '16:9', '1:1'],
+  math: 'x = sin(a t + phi), y = sin(b t), a:b = 1:1, 1:2, 2:3, 3:4; neighbours blended coefficient by coefficient so the curve stays closed; ribbon = 3 copies offset by d along the normal, over/under alternating at the 2ab-a-b crossings',
+  label: 'The lying eight opens into a double loop, then a triple-loop knot and back: one closed Lissajous line drawn as a ribbon of three pencils that passes over and under itself at every crossing.',
+  // d: spacing of the ribbon lines (units of S); seg: points on the closed curve at q = 1; cons: faint construction on or off
+  params: { d: 0.0135, seg: 440, cons: 1 },
+};
+
+const TAU = 2 * Math.PI;
+// States: a, b, phase, y amplitude. The cycle walks through them and back through the same forms.
+const ST = [[1, 1, Math.PI / 2, 0.55], [1, 2, 0, 0.64], [2, 3, 1.2, 0.8], [3, 4, 0.9, 0.88]], SEQ = [[1, 2, 3, 2], [0, 1, 2, 3, 2, 1]]; // loop mode: the lying eight, 2:3, 3:4 and back; live mode also opens the ellipse
+// Alignment of each state's curve parameter to the previous one: [shift, direction, flip x, flip y]. Found offline by maximising the slowest point speed
+// along the blend (no pinch), with s = 0 on a lobe tip of every state, where no crossing can be, so the over/under count starts at a fixed place.
+const AL = [[0, 1, 1, 1], [1.5708, -1, 1, -1], [0.1854, -1, -1, -1], [1.2708, -1, -1, -1]];
+
+const SCR = { M: 0 };
+let PX = 0, PY = 0; // scratch result of ribbon's point lookup
+const alloc = M => { // scratch buffers, grown only, never read across frames
+  if (SCR.M >= M) return SCR; SCR.M = M;
+  for (const k of ['X', 'Y', 'NX', 'NY', 'DE', 'DS']) SCR[k] = new Float64Array(M);
+  SCR.head = new Int32Array(96 * 96); SCR.es = new Int32Array(M * 6); SCR.en = new Int32Array(M * 6);
+  SCR.vp = new Float64Array(160); SCR.vc = new Int32Array(160); SCR.vf = new Uint8Array(160);
+  for (const k of ['cutC', 'cutH', 'cutS', 'IA', 'IB']) SCR[k] = new Float64Array(80);
+  SCR.cx = new Float64Array(80); SCR.cy = new Float64Array(80); SCR.cs = new Float64Array(80); SCR.cc = new Float64Array(80);
+  return SCR;
+};
+
+// Self-crossings of the closed polyline (cs, cc: signed sin and cos of the angle between the two passes) by a grid hash. Fills S.cx (param on first pass), S.cy (param on second), S.cs (signed sin of the angle), S.cc (cos); returns the count.
+function crossings(S, M, cell) {
+  const { X, Y, head, es, en } = S; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let i = 0; i < M; i++) { x0 = Math.min(x0, X[i]); x1 = Math.max(x1, X[i]); y0 = Math.min(y0, Y[i]); y1 = Math.max(y1, Y[i]); }
+  const gw = Math.min(95, Math.ceil((x1 - x0) / cell) + 1), gh = Math.min(95, Math.ceil((y1 - y0) / cell) + 1), cl = (v, o, n) => Math.min(n - 1, Math.floor((v - o) / cell));
+  head.fill(-1, 0, 96 * 96); let ne = 0;
+  for (let i = 0; i < M; i++) {
+    const j = (i + 1) % M, ax = cl(Math.min(X[i], X[j]), x0, gw), bx = cl(Math.max(X[i], X[j]), x0, gw), ay = cl(Math.min(Y[i], Y[j]), y0, gh), by = cl(Math.max(Y[i], Y[j]), y0, gh);
+    for (let cy = ay; cy <= by; cy++) for (let cx = ax; cx <= bx; cx++) { if (ne >= es.length) break; es[ne] = i; en[ne] = head[cy * 96 + cx]; head[cy * 96 + cx] = ne++; }
+  }
+  let K = 0;
+  for (let cy = 0; cy < gh; cy++) for (let cx = 0; cx < gw; cx++) for (let p = head[cy * 96 + cx]; p >= 0; p = en[p]) for (let q = en[p]; q >= 0; q = en[q]) {
+    const a = Math.min(es[p], es[q]), b = Math.max(es[p], es[q]); if (b - a < 2 || (a === 0 && b === M - 1)) continue;
+    const a1 = (a + 1) % M, b1 = (b + 1) % M, rx = X[a1] - X[a], ry = Y[a1] - Y[a], sx = X[b1] - X[b], sy = Y[b1] - Y[b], den = rx * sy - ry * sx; if (Math.abs(den) < 1e-14) continue;
+    const qx = X[b] - X[a], qy = Y[b] - Y[a], t = (qx * sy - qy * sx) / den, u = (qx * ry - qy * rx) / den; if (t < 0 || t >= 1 || u < 0 || u >= 1) continue;
+    if (cl(X[a] + t * rx, x0, gw) !== cx || cl(Y[a] + t * ry, y0, gh) !== cy || K >= 78) continue;
+    const l = Math.hypot(rx, ry) * Math.hypot(sx, sy); S.cx[K] = a + t; S.cy[K] = b + u; S.cs[K] = den / l; S.cc[K] = (rx * sx + ry * sy) / l; K++;
+  }
+  return K;
+}
+
+function draw(ctx, { g }) {
+  const P = g.params, r = g.rng('lissa'), q = Math.min(1, g.q ?? 1), M = Math.max(220, Math.round(P.seg * Math.min(1, Math.max(0.6, g.S / 1000)) * (0.7 + 0.3 * q))), S = alloc(M), { X, Y, NX, NY, DE, DS } = S;
+  const v = g.voice, sd = r() * TAU, sg = r() < 0.5 ? 1 : -1;
+  // where we are on the cycle of forms: four passes per loop (live: three per T of the unbounded clock, plus a slow warp so the passes differ and the long cycle never repeats in step with the wobble)
+  const sq = SEQ[+g.live], nq = sq.length, pos = (((g.live ? g.drift / g.T * 3 + 0.3 * Math.sin(v(3) + 1 + g.drift * 0.02) : g.p * 4) % nq) + nq) % nq, i0 = Math.floor(pos), fr = pos - i0;
+  const j0 = sq[i0], j1 = sq[(i0 + 1) % nq], fx = fr - Math.sin(TAU * fr) / (2 * TAU), fy = fx, // tempo curve: the pass is slowest at each form (half speed), quickest between them
+    wob0 = 0.14 * Math.sin(v(2) + sd + 1.7 * i0), wob1 = 0.14 * Math.sin(v(2) + sd + 1.7 * (i0 + 1));
+  const ay = (1 - fy) * ST[j0][3] + fy * ST[j1][3], sx = Math.min(g.bx * 0.93, g.by * 0.93 / ay, g.by * 2.1), ky = Math.min(1.25, g.by * 0.92 / (sx * ay)) * (1 + 0.04 * Math.sin(v(4) + g.drift * 0.03)); // portrait pages stretch the figure a little taller
+  const A0 = AL[j0], A1 = AL[j1], a0 = ST[j0], a1 = ST[j1];
+  for (let i = 0; i < M; i++) {
+    const s = sg * TAU * i / M, u0 = A0[1] * s + A0[0], u1 = A1[1] * s + A1[0];
+    X[i] = sx * ((1 - fx) * A0[2] * Math.sin(a0[0] * u0 + a0[2] + wob0) + fx * A1[2] * Math.sin(a1[0] * u1 + a1[2] + wob1));
+    Y[i] = sx * ky * ((1 - fy) * A0[3] * a0[3] * Math.sin(a0[1] * u0) + fy * A1[3] * a1[3] * Math.sin(a1[1] * u1));
+  }
+  const d0 = P.d * (0.8 + 0.4 * Math.sin(v(5) + 1 + g.drift * 0.05)), lw = g.lw('line') * 1.3, N = 3;
+  for (let i = 0; i < M; i++) { // tangent, normal, ribbon half spread (pinched where the curve bends tighter than the offset)
+    const p = (i + M - 1) % M, n = (i + 1) % M, tx = X[n] - X[p], ty = Y[n] - Y[p], tl = Math.hypot(tx, ty) || 1, ax = X[n] - 2 * X[i] + X[p], ay2 = Y[n] - 2 * Y[i] + Y[p];
+    NX[i] = -ty / tl; NY[i] = tx / tl; DS[i] = Math.hypot(X[n] - X[i], Y[n] - Y[i]) || 1e-6;
+    const kap = 4 * Math.abs(tx * ay2 - ty * ax) / (tl * tl * tl); // curvature from central differences
+    DE[i] = d0 / Math.sqrt(Math.sqrt(1 + Math.pow(d0 * kap / 0.7, 4)));
+  }
+  // over/under: visits along the curve alternate over, under, over ...; the under pass is cut either side of the over ribbon
+  const K = crossings(S, M, 0.05), V = 2 * K; let nc = 0;
+  for (let k = 0; k < K; k++) { S.vp[2 * k] = S.cx[k]; S.vc[2 * k] = k; S.vf[2 * k] = 0; S.vp[2 * k + 1] = S.cy[k]; S.vc[2 * k + 1] = k; S.vf[2 * k + 1] = 1; }
+  for (let i = 1; i < V; i++) { const p = S.vp[i], c = S.vc[i], f = S.vf[i]; let j = i - 1; while (j >= 0 && S.vp[j] > p) { S.vp[j + 1] = S.vp[j]; S.vc[j + 1] = S.vc[j]; S.vf[j + 1] = S.vf[j]; j--; } S.vp[j + 1] = p; S.vc[j + 1] = c; S.vf[j + 1] = f; }
+  // the count of over/under visits starts at s = 0; when a crossing passes s = 0 the whole weave would swap, so the gaps close for that moment and reopen swapped
+  let near = M; for (let i = 0; i < V; i++) near = Math.min(near, S.vp[i], M - S.vp[i]);
+  const open = (u => u * u * (3 - 2 * u))(Math.min(1, near / 9));
+  if (open > 0.02) for (let i = 1; i < V; i += 2) { // odd visits are the under passes; each line of the under ribbon is cut where it meets the over ribbon (band half width h plus a gap)
+    const c = S.vc[i], ii = Math.floor(S.vp[i]) % M, sn = S.vf[i] ? S.cs[c] : -S.cs[c], sU = (sn < 0 ? -1 : 1) * Math.max(0.2, Math.abs(sn)), h = DE[ii] + lw * 2.2;
+    S.cutC[nc] = S.vp[i]; S.cutH[nc] = open * h / Math.abs(sU) / DS[ii]; S.cutS[nc++] = -DE[ii] * S.cc[c] / sU / DS[ii];
+  }
+  const cols = g.c.accent === g.c.ink ? [g.c.ink, g.c.tint1, g.c.ink] : [g.c.accent, g.c.cool, g.c.third];
+  if (P.cons) { // faint construction: the bounding box, the axes, the circle the figure turns in
+    const hx = sx, hy = sx * ky * ay; ctx.lineCap = 'butt'; g.pen(ctx, 'hair', 1, g.c.tint2); ctx.beginPath();
+    ctx.rect(-hx, -hy, 2 * hx, 2 * hy); ctx.moveTo(-hx * 1.06, 0); ctx.lineTo(hx * 1.06, 0); ctx.moveTo(0, -hy * 1.06); ctx.lineTo(0, hy * 1.06); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, 0, hx, hy, 0, 0, TAU); ctx.stroke();
+  }
+  ribbon(ctx, S, M, N, cols, lw, nc, r);
+}
+
+// Strokes the N ribbon lines of the closed centreline, one path per line, leaving the cut intervals (index units) empty. Each line has its own cuts: they slant like the edge of the over ribbon.
+function ribbon(ctx, S, M, N, cols, lw, nc, r) {
+  const { X, Y, NX, NY, DE, cutC, cutH, cutS, IA, IB } = S; ctx.lineCap = 'butt';
+  const at = (x, o) => { const i = Math.floor(x), f = x - i, a = ((i % M) + M) % M, b = (a + 1) % M, dA = o * DE[a], dB = o * DE[b]; PX = X[a] + NX[a] * dA + (X[b] + NX[b] * dB - X[a] - NX[a] * dA) * f; PY = Y[a] + NY[a] * dA + (Y[b] + NY[b] * dB - Y[a] - NY[a] * dA) * f; };
+  for (let k = 0; k < N; k++) {
+    const o = k - (N - 1) / 2; let n = 0;
+    for (let j = 0; j < nc; j++) { const h = cutH[j], a = (((cutC[j] + o * cutS[j] - h) % M) + M) % M; let p = n++; while (p > 0 && IA[p - 1] > a) { IA[p] = IA[p - 1]; IB[p] = IB[p - 1]; p--; } IA[p] = a; IB[p] = a + 2 * h; }
+    let w = 0; for (let j = 0; j < n; j++) { if (w && IA[j] <= IB[w - 1]) IB[w - 1] = Math.max(IB[w - 1], IB[j]); else { IA[w] = IA[j]; IB[w] = IB[j]; w++; } } n = w; // merge overlaps
+    while (n > 1 && IB[n - 1] - M >= IA[0]) { IA[0] = IA[n - 1] - M; IB[0] = Math.max(IB[0], IB[n - 1] - M); n--; } // a cut that wraps past M swallows the first
+    ctx.strokeStyle = cols[k]; ctx.lineWidth = lw * (0.9 + 0.2 * r()); ctx.globalAlpha = 0.82 + 0.18 * r(); ctx.beginPath();
+    if (!n) { for (let i = 0; i < M; i++) { const dd = o * DE[i]; i ? ctx.lineTo(X[i] + NX[i] * dd, Y[i] + NY[i] * dd) : ctx.moveTo(X[0] + NX[0] * dd, Y[0] + NY[0] * dd); } ctx.closePath(); }
+    else for (let m = 0; m < n; m++) { // run from the end of cut m to the start of cut m+1
+      const e = IB[m], s = m + 1 < n ? IA[m + 1] : IA[0] + M; if (s <= e) continue;
+      at(e, o); ctx.moveTo(PX, PY); for (let i = Math.floor(e) + 1; i < s; i++) { at(i, o); ctx.lineTo(PX, PY); } at(s, o); ctx.lineTo(PX, PY);
+    }
+    ctx.stroke();
+  }
+  ctx.lineCap = 'round'; ctx.globalAlpha = 1;
+}
+
+const mountPiece = (el, o) => mount(el, { piece: { meta, draw }, ...o });
+(window.genart ||= {}).mount ??= mountPiece;
+
+const q = new URLSearchParams(location.search), o = { seed: q.get('seed') ?? '1', aspect: q.get('aspect') || undefined,
+  theme: q.get('theme') || 'mono', t: q.has('t') ? +q.get('t') : undefined, params: {}, fit: true,
+  reduce: q.has('reduce') ? q.get('reduce') === '1' : undefined };
+q.forEach((v, k) => k.startsWith('p.') && (o.params[k.slice(2)] = +v));
+document.body.style.background = theme(o.theme).paper;
+const ex = q.get('export'), P = { meta, draw }, sz = q.get('size') || undefined;
+if (ex === 'png') exportPNG(P, { ...o, size: sz }).then(b => save(b, 'v01-liggende-acht.png'));
+else if (ex === 'webm') exportWebm(P, { ...o, size: sz }).then(b => save(b, 'v01-liggende-acht.webm'));
+else if (ex === 'frames') { const b = document.createElement('button'); b.textContent = 'Choose folder'; b.onclick = () => exportFrames(P, { ...o, size: sz }); document.body.append(b); }
+else mountPiece(document.body, o);
+</script>

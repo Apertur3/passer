@@ -1,0 +1,410 @@
+// genart.js: shared helpers for every piece. Plain ES module, no dependencies.
+// Built into each piece's dist file by scripts/build.mjs (exports are stripped there).
+
+// ---- themes ---------------------------------------------------------------
+const THEMES = {
+  mono: { paper: '#E4E2DD', ink: '#1B1A18' },
+  fieldnotes: { paper: '#E9E8E3', ink: '#141518', accent: '#A8521F', cool: '#3F6688', third: '#3D8A6E' },
+  night: { paper: '#121316', ink: '#EAE7E0', accent: '#D98552', cool: '#8FB0CF', third: '#6CC0A0' },
+};
+const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => '#' + rgb(a).map((v, i) => Math.round(v + (rgb(b)[i] - v) * k).toString(16).padStart(2, '0')).join('');
+function theme(name) {
+  const t = THEMES[name] || THEMES.mono;
+  return { paper: t.paper, ink: t.ink, accent: t.accent || t.ink, cool: t.cool || t.ink, third: t.third || t.ink,
+    tint1: mix(t.paper, t.ink, 0.35), tint2: mix(t.paper, t.ink, 0.12) };
+}
+
+// ---- prng: sfc32 seeded through cyrb128 ------------------------------------
+function cyrb128(s) {
+  let a = 1779033703, b = 3144134277, c = 1013904242, d = 2773480762;
+  for (let i = 0, k; i < s.length; i++) {
+    k = s.charCodeAt(i);
+    a = b ^ Math.imul(a ^ k, 597399067); b = c ^ Math.imul(b ^ k, 2869860233);
+    c = d ^ Math.imul(c ^ k, 951274213); d = a ^ Math.imul(d ^ k, 2716044179);
+  }
+  a = Math.imul(c ^ (a >>> 18), 597399067); b = Math.imul(d ^ (b >>> 22), 2869860233);
+  c = Math.imul(a ^ (c >>> 17), 951274213); d = Math.imul(b ^ (d >>> 19), 2716044179);
+  return [(a ^ b ^ c ^ d) >>> 0, (b ^ a) >>> 0, (c ^ a) >>> 0, (d ^ a) >>> 0];
+}
+function sfc32(a, b, c, d) {
+  return () => {
+    a |= 0; b |= 0; c |= 0; d |= 0;
+    const t = (((a + b) | 0) + d) | 0;
+    d = (d + 1) | 0; a = b ^ (b >>> 9); b = (c + (c << 3)) | 0; c = (c << 21) | (c >>> 11); c = (c + t) | 0;
+    return (t >>> 0) / 4294967296;
+  };
+}
+function prng(seed) { const r = sfc32(...cyrb128(String(seed))); for (let i = 0; i < 12; i++) r(); return r; }
+
+// ---- noise: simplex 4D, loop noise ----------------------------------------
+const PERM = new Uint8Array(512), GRAD = [];
+{ const r = prng('genart-noise'), a = [...Array(256).keys()];
+  for (let i = 255; i > 0; i--) { const j = (r() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+  for (let i = 0; i < 512; i++) PERM[i] = a[i & 255];
+  for (let z = 0; z < 4; z++) for (const p of [-1, 1]) for (const q of [-1, 1]) for (const s of [-1, 1]) { const v = [p, q, s]; v.splice(z, 0, 0); GRAD.push(v); } }
+const F4 = (Math.sqrt(5) - 1) / 4, G4 = (5 - Math.sqrt(5)) / 20;
+function noise4(x, y, z, w) { // about [-1, 1]
+  const s = (x + y + z + w) * F4, c0 = [x, y, z, w].map(v => Math.floor(v + s)), t = (c0[0] + c0[1] + c0[2] + c0[3]) * G4;
+  const X = [x, y, z, w].map((v, i) => v - (c0[i] - t)), rk = [0, 0, 0, 0];
+  for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) X[a] > X[b] ? rk[a]++ : rk[b]++;
+  let n = 0;
+  for (let c = 0; c < 5; c++) {
+    const o = rk.map(v => (c && v >= 4 - c ? 1 : 0)), d = X.map((v, i) => v - o[i] + c * G4);
+    const u = 0.6 - d[0] * d[0] - d[1] * d[1] - d[2] * d[2] - d[3] * d[3];
+    if (u > 0) {
+      const P = (i) => PERM[i & 255], gv = GRAD[P(c0[0] + o[0] + P(c0[1] + o[1] + P(c0[2] + o[2] + P(c0[3] + o[3])))) & 31];
+      n += u * u * u * u * (gv[0] * d[0] + gv[1] * d[1] + gv[2] * d[2] + gv[3] * d[3]);
+    }
+  }
+  return 27 * n;
+}
+const loopNoise = (x, y, th, r) => noise4(x, y, r * Math.cos(th), r * Math.sin(th));
+
+// ---- easing: only these two are allowed ----------------------------------
+const cl = u => Math.min(1, Math.max(0, u));
+const ease = {
+  sine: u => 0.5 - 0.5 * Math.cos(Math.PI * cl(u)),
+  smoother: u => { u = cl(u); return u * u * u * (u * (u * 6 - 15) + 10); },
+  // tempo curve, no rests: a phase that runs between 0.5x and 1.5x of the average speed and never stops
+  rest: p => p + Math.sin(2 * Math.PI * p) / (4 * Math.PI),
+  // breathing amplitude 0..1 over one loop (cosine of the tempo-varied phase)
+  breath: p => 0.5 - 0.5 * Math.cos(2 * Math.PI * ease.rest(p)),
+};
+
+// ---- frame: unit transform, paper, line weights ---------------------------
+const LW = { hair: 0.0006, fine: 0.0012, line: 0.0025, bold: 0.006, mass: 0.02 };
+function frame(ctx, { w, h, seed = 1, theme: tn = 'mono', q = 1 }) {
+  const S = Math.min(w, h), aspect = Math.max(w, h) / S, c = theme(tn), m = aspect > 1.5 ? 0.06 : 0.08;
+  const hw = w / S / 2, hh = h / S / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = c.paper; ctx.fillRect(0, 0, w, h);
+  ctx.setTransform(S, 0, 0, S, w / 2, h / 2); ctx.lineCap = ctx.lineJoin = 'round';
+  const lw = n => Math.max(LW[n], 0.75 / S);
+  // g.q: quality factor in (0, 1]. 1 in tests, exports and ?t= frames; mount's governor lowers it on slow devices.
+  // Heavy pieces multiply their element counts (segments, particles, dots) by g.q, rounding up to at least a sensible minimum.
+  return { S, aspect, w, h, hw, hh, m, bx: hw - m, by: hh - m, c, seed, lw, q,
+    // pen: set stroke width (floored at 0.75 device px, alpha scaled to keep tone), alpha and colour
+    pen(ctx, n, a = 1, col = c.ink) { ctx.lineWidth = lw(n); ctx.globalAlpha = a * Math.min(1, LW[n] / lw(n)); ctx.strokeStyle = col; },
+    rng: salt => prng(seed + ':' + (salt || '')), noise4, ease };
+}
+
+// ---- paper: two static grain tiles + dust (spec: grain; baked under the marks for speed) ----
+const TILES = {}, GK = 2.6; // GK scales the spec alphas: soft-light on bright paper is weak, this lands at std 2 to 5
+function tile(n, seed, amp) {
+  const k = n + seed; if (TILES[k]) return TILES[k];
+  const cv = document.createElement('canvas'); cv.width = cv.height = n;
+  const x = cv.getContext('2d'), im = x.createImageData(n, n), r = prng('grain' + k);
+  for (let i = 0; i < n * n; i++) im.data.set([0, 0, 0, 255].fill(128 + (r() * 2 - 1) * amp, 0, 3), i * 4);
+  x.putImageData(im, 0, 0); return (TILES[k] = cv);
+}
+// The paper (fill, dust, grain) is static, so it is built once per (seed, size, theme) and blitted each frame.
+const PAPER = new Map();
+function paper(g) {
+  const k = [g.seed, g.w, g.h, g.c.paper].join('|');
+  if (PAPER.has(k)) return PAPER.get(k);
+  const cv = document.createElement('canvas'); cv.width = g.w; cv.height = g.h;
+  const ctx = cv.getContext('2d'), r = g.rng('dust'), n = (r() * 41) | 0;
+  ctx.fillStyle = g.c.paper; ctx.fillRect(0, 0, g.w, g.h); ctx.fillStyle = g.c.ink;
+  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.15 + 0.25 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0003 + 0.0002 * r()), 0, 7); ctx.fill(); } // owner: large dark specks must go: tiny and faint only
+  const k0 = Math.max(1, g.S / 1000); ctx.globalCompositeOperation = 'soft-light';
+  [[241, 1, 0.10 * GK], [257, 3, 0.06 * GK]].forEach(([sz, m, a]) => {
+    const p = ctx.createPattern(tile(sz, g.seed, 127), 'repeat'); p.setTransform(new DOMMatrix().scale(k0 * m));
+    ctx.globalAlpha = a; ctx.fillStyle = p; ctx.fillRect(0, 0, g.w, g.h);
+  });
+  if (PAPER.size > 6) PAPER.delete(PAPER.keys().next().value);
+  PAPER.set(k, cv); return cv;
+}
+
+// ---- render: the one place that turns (piece, seed, t, size, theme) into pixels ---
+function render(piece, ctx, o) {
+  const g = setup(piece, ctx, o);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(paper(g), 0, 0); ctx.restore();
+  piece.draw(ctx, { seed: o.seed, t: o.t, w: o.w, h: o.h, g });
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+}
+// setup: the frame helper plus phase, noise and live-mode helpers (also used headless by scripts/motion.mjs)
+function setup(piece, ctx, o) {
+  const g = frame(ctx, o), T = piece.meta.T;
+  g.params = { ...piece.meta.params, ...o.params };
+  g.T = T; g.p = (((o.t / T) % 1) + 1) % 1; g.theta = 2 * Math.PI * g.p;
+  g.thetaR = 2 * Math.PI * ease.rest(g.p); // theta with varying tempo (0.5x..1.5x), never stops
+  // Live mode (mount default; exports, ?t= frames, tests and ?loop=1 stay in loop mode, where drift = 0 and everything closes at T):
+  //  g.live   true in live mode.
+  //  g.drift  unbounded slow time in seconds (page clock); 0 in loop mode. Use it for slow envelopes that should never recur.
+  //  g.voice(k) loop mode: k * theta (integer k >= 1, closes). Live: 2*pi*(t/T)*(k + eps_k) unwrapped, with small detunes so
+  //           voices slip against each other and the combination never repeats.
+  //  g.loop(x, y, r, th) loop noise; live: the sampling circle's centre wanders slowly through noise space, so fields never recur.
+  g.live = !!o.live; g.drift = g.live ? o.t : 0;
+  const EPS = [0, 0.0618, 0.1414, 0.0732, 0.0236, 0.1032, 0.0455, 0.0871];
+  g.voice = k => g.live ? 2 * Math.PI * (o.t / T) * (k + (EPS[k - 1] ?? ((k * 0.618034) % 1) * 0.1)) : k * g.theta;
+  const D = [0.37, 0.61, 0.43, 0.29].map(v => v * 0.03 * g.drift);
+  g.loop = (x, y, r, th = g.theta) => g.live ? noise4(x + D[0], y + D[1], r * Math.cos(th) + D[2], r * Math.sin(th) + D[3]) : loopNoise(x, y, th, r);
+  return g;
+}
+
+// ---- clock: rAF loop with pause and resume ------
+function clock(fn) {
+  let raf = 0;
+  const loop = ts => { raf = requestAnimationFrame(loop); fn(ts / 1000); };
+  return { start() { if (!raf) raf = requestAnimationFrame(loop); }, stop() { cancelAnimationFrame(raf); raf = 0; }, get running() { return !!raf; } };
+}
+
+// ---- mount: responsive, pauses offscreen, honours reduced motion -----------
+function mount(el, o) {
+  const { piece } = o, m = piece.meta, seed = o.seed ?? 1, tn = o.theme || 'mono';
+  const [aw, ah] = (o.aspect || m.aspects[0]).split(':').map(Number), ar = aw / ah;
+  const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+  cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', m.label);
+  cv.style.cssText = `display:block;border:0;background:${theme(tn).paper};` + (o.fit ? '' : `width:100%;aspect-ratio:${aw}/${ah}`);
+  el.appendChild(cv);
+  const inst = { canvas: cv, frames: 0, q: 1, qSteps: 0, drawMs: [], destroy }; // drawMs: cost of the last 600 live paints (draw+frame, CPU side)
+  const mql = matchMedia('(prefers-reduced-motion: reduce)'), reduced = () => (o.reduce ?? mql.matches);
+  let vis = true, lastT = 0, lastLive = false, sized = false, key = '';
+  const paint = (t, again, live) => { // static modes skip a repaint of an identical frame
+    const k = cv.width + 'x' + cv.height + ':' + t; if (!sized || (!again && k === key)) return; key = k; lastT = t; lastLive = live; render(piece, ctx, { seed, t, w: cv.width, h: cv.height, theme: tn, params: o.params, q: gov.q, live }); inst.frames++; };
+  // Quality governor (live clock only; never for exports or ?t= frames). Rolling mean over 30 frames of (a) the cost of
+  // draw+frame and (b) the rAF interval. Mean cost > 12 ms or interval > 22 ms: step g.q down one level of [1, .7, .5, .35].
+  // Mean cost < 6 ms and interval < 18 ms for 3 consecutive windows (90 frames): step back up one level.
+  const gov = { q: o.q ?? 1, target: o.q ?? 1, L: [1, 0.7, 0.5, 0.35], i: 0, n: 0, cost: 0, gap: 0, bad: 0, good: 0, last: 0, stepAt: 0 };
+  // Live clock ACCUMULATES: tAcc += clamp(dt, 0, 0.05) * speed, with dt from rAF timestamps and speed = inst.speed * meta.speed.
+  // Changing the speed never changes the phase (no jump), and a stall or a pause becomes a slight slowdown, never a visual jump.
+  // The live t (= tAcc, unbounded) starts at meta.start * T and feeds g.drift / g.voice.
+  inst.speed = o.speed ?? 1; let tAcc = (m.start ?? 0.25) * m.T, lastTs = 0;
+  // Quality governor (live clock only; never for exports or ?t= frames). Windows of 30 frames of (a) the cost of draw+frame and
+  // (b) the rAF interval. Down one level of [1, .7, .5, .35] after 2 consecutive overloaded windows, about 1 s (cost > 10 ms or interval > 22 ms);
+  // up after 3 consecutive good windows (cost < 5 ms and interval < 18 ms) and at least 5 s since the last step. g.q itself eases toward the
+  // target level (about 1 s), so element counts fade rather than pop.
+  const govern = (cost, now) => {
+    const gap = gov.last && now - gov.last < 100 ? now - gov.last : 0; gov.last = now;
+    gov.cost += cost; gov.gap += gap || 16;
+    if (o.q == null) gov.q += (gov.target - gov.q) * 0.06;
+    inst.q = gov.q;
+    if (++gov.n < 30) return;
+    const c = gov.cost / 30, d = gov.gap / 30; gov.n = gov.cost = gov.gap = 0;
+    const bad = c > 10 || d > 22, good = c < 5 && d < 18; gov.bad = bad ? gov.bad + 1 : 0; gov.good = good ? gov.good + 1 : 0;
+    if (gov.bad >= 2 && gov.i < 3 && now - gov.stepAt > 1500) { gov.i++; inst.qSteps++; gov.stepAt = now; gov.bad = 0; } else if (gov.good >= 3 && gov.i > 0 && now - gov.stepAt > 5000) { gov.i--; inst.qSteps++; gov.stepAt = now; gov.good = 0; }
+    gov.target = gov.L[gov.i];
+  };
+  const clk = clock(ts => {
+    const t0 = performance.now(); tAcc += Math.min(0.05, Math.max(0, lastTs ? ts - lastTs : 0)) * inst.speed * (m.speed ?? 1); lastTs = ts;
+    paint(tAcc, 1, !o.loop); const cost = performance.now() - t0; inst.drawMs.push(cost); if (inst.drawMs.length > 600) inst.drawMs.shift(); govern(cost, t0);
+  });
+  function update() {
+    if (o.t != null) { clk.stop(); paint(o.t); }
+    else if (reduced()) { clk.stop(); paint(m.still * m.T); }
+    else if (vis && !document.hidden) { if (!clk.running) lastTs = 0; clk.start(); } else clk.stop();
+    cv.dataset.state = clk.running ? 'running' : 'paused';
+  }
+  const ro = new ResizeObserver(([e]) => {
+    const { width, height } = e.contentRect; if (!width) return;
+    const cw = o.fit ? Math.min(width, height * ar) : width, ch = cw / ar;
+    if (o.fit) { cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; }
+    const liveMode = o.t == null && !reduced() && !o.loop, k = Math.min(devicePixelRatio || 1, liveMode ? (o.dprMax ?? m.dprMax ?? 2) : 2); // meta.dprMax: heavy pieces ask for DPR 1 in live mode
+    let pw = cw * k; if (pw * (pw / ar) > 2.5e6) pw = Math.sqrt(2.5e6 * ar);
+    const nw = Math.round(pw), nh = Math.round(pw / ar); if (cv.width === nw && cv.height === nh && sized) return; // no needless clear
+    cv.width = nw; cv.height = nh; sized = true; update(); if (lastT || !clk.running) paint(lastT, 0, lastLive); // repaint in the same task: no blank frame is ever composited
+  });
+  const io = new IntersectionObserver(es => { vis = es[es.length - 1].isIntersecting; update(); });
+  const onVis = () => update();
+  ro.observe(el); io.observe(cv); document.addEventListener('visibilitychange', onVis); mql.addEventListener('change', onVis);
+  function destroy() { clk.stop(); ro.disconnect(); io.disconnect(); document.removeEventListener('visibilitychange', onVis); mql.removeEventListener('change', onVis); cv.remove(); }
+  return inst;
+}
+
+// ---- exports ---------------------------------------------------------------
+function target(piece, o) {
+  const [aw, ah] = (o.aspect || piece.meta.aspects[0]).split(':').map(Number), [w, h] = String(o.size || 2000).split('x').map(Number);
+  return { w, h: h || Math.round(w * ah / aw) };
+}
+const canvasFor = (piece, o) => { const cv = document.createElement('canvas'); Object.assign(cv, target(piece, o)); return cv; };
+const opts = (piece, o, cv, t) => ({ seed: o.seed ?? 1, theme: o.theme || 'mono', params: o.params, w: cv.width, h: cv.height, t });
+const blobOf = (cv, type = 'image/png') => new Promise(r => cv.toBlob(r, type));
+function exportPNG(piece, o = {}) { // the reduced-motion frame, at full size
+  const cv = canvasFor(piece, o); render(piece, cv.getContext('2d'), opts(piece, o, cv, piece.meta.still * piece.meta.T)); return blobOf(cv);
+}
+async function exportWebm(piece, o = {}, fps = 30) { // one seamless loop, real-time capture
+  const cv = canvasFor(piece, o), ctx = cv.getContext('2d'), track = cv.captureStream(0).getVideoTracks()[0];
+  const rec = new MediaRecorder(new MediaStream([track]), { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 12e6 });
+  const parts = []; rec.ondataavailable = e => parts.push(e.data); rec.start();
+  for (let i = 0; i < piece.meta.T * fps; i++) { render(piece, ctx, opts(piece, o, cv, i / fps)); track.requestFrame(); await new Promise(r => setTimeout(r, 1000 / fps)); }
+  await new Promise(r => { rec.onstop = r; rec.stop(); }); return new Blob(parts, { type: 'video/webm' });
+}
+async function exportFrames(piece, o = {}, fps = 30) { // needs a user gesture for the folder picker
+  const dir = await showDirectoryPicker(), cv = canvasFor(piece, o), ctx = cv.getContext('2d');
+  for (let i = 0; i < piece.meta.T * fps; i++) {
+    render(piece, ctx, opts(piece, o, cv, i / fps));
+    const f = await (await dir.getFileHandle(`frame_${String(i).padStart(5, '0')}.png`, { create: true })).createWritable();
+    await f.write(await blobOf(cv)); await f.close();
+  }
+}
+function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e4); }
+
+// V06 Rhombenring (a rhombus ring, hand-drawn construction).
+// One rule: a ring of rhombi on the unit vectors u_k is hatched in three pencil tones by tile orientation, so it reads as a twisted band; the tones turn round it and hexagons of three tiles flip.
+const meta = {
+  id: 'v06-rhombenring', pencils: true, title: 'Rhombenring', nl: 'Rhombenring', T: 12, still: 0.4, start: 0.3, aspects: ['4:5', '16:9', '1:1'],
+  math: 'tile(a,b) = s u_a + t u_b, u_k = (cos(pi k/n), sin(pi k/n)); ring = Z(2,...,2) minus a centred hole; tone = Lambert shade of the lifted facet E_a x E_b',
+  label: 'A ring of rhombi hatched in three pencil tones by tile orientation so it reads as a twisted band; the tones turn round it and hexagons of three tiles flip.',
+  // n: the polygon has 2n corners (0 = by seed); pitch: hatch spacing in S
+  params: { n: 0, pitch: 0.009 },
+};
+
+const TAU = 2 * Math.PI, MEMO = {}, DUR = 1.5, STEP = 0.8, LAG = 1.3;
+const uv = (n, d) => [Math.cos(Math.PI * d / n), Math.sin(Math.PI * d / n)];
+const key = (x, y) => Math.round(x * 1e3) + ',' + Math.round(y * 1e3);
+const hash = (i, l, k) => { const v = Math.sin(i * 12.9898 + l * 78.233 + k * 37.719) * 43758.5453; return v - Math.floor(v); };
+const sm = u => (u = Math.min(1, Math.max(0, u))) * u * (3 - 2 * u);
+
+// ---- tiling: exact cover of the ring by rhombi, backtracking from the most constrained edge ----
+const zono = (n, m) => { // CCW boundary, side lengths m[k]; vertices carry the outgoing direction
+  const p = []; let x = 0, y = 0;
+  for (let d = 0; d < 2 * n; d++) for (let i = 0; i < m[d % n]; i++) { p.push([x, y, d]); const w = uv(n, d); x += w[0]; y += w[1]; }
+  const cx = p.reduce((s, v) => s + v[0], 0) / p.length, cy = p.reduce((s, v) => s + v[1], 0) / p.length;
+  return p.map(v => [v[0] - cx, v[1] - cy, v[2]]);
+};
+const overlap = (P, Q) => { // convex polygons share area
+  for (const S of [P, Q]) for (let i = 0; i < S.length; i++) {
+    const a = S[i], b = S[(i + 1) % S.length], nx = a[1] - b[1], ny = b[0] - a[0], r = Z => { const d = Z.map(v => v[0] * nx + v[1] * ny); return [Math.min(...d), Math.max(...d)]; }, [p0, p1] = r(P), [q0, q1] = r(Q);
+    if (p1 <= q0 + 1e-6 || q1 <= p0 + 1e-6) return false;
+  }
+  return true;
+};
+function solve(n, rnd, cap) {
+  const N2 = 2 * n, U = d => uv(n, d);
+  const outer = zono(n, Array(n).fill(2)), hole = zono(n, Array.from({ length: n }, (_, k) => n % 2 ? 1 : k % 2 ? 0 : 2));
+  const F = new Map(), tiles = [], polys = [hole.map(v => [v[0], v[1]])]; // frontier edges, free side on the left
+  const add = (x, y, d) => F.set(key(x, y) + '>' + d, [x, y, d]);
+  outer.forEach(v => add(...v));
+  hole.forEach(v => { const u = U(v[2]); add(v[0] + u[0], v[1] + u[1], (v[2] + n) % N2); });
+  let nodes = 0;
+  const cand = ([x, y, d]) => {
+    const u = U(d), out = [];
+    for (let s = 1; s < n; s++) {
+      const b = (d + s) % N2, w = U(b), P = [[x, y], [x + u[0], y + u[1]], [x + u[0] + w[0], y + u[1] + w[1]], [x + w[0], y + w[1]]];
+      if (!P.every(v => outer.every((o, i) => { const q = outer[(i + 1) % outer.length]; return (q[0] - o[0]) * (v[1] - o[1]) - (q[1] - o[1]) * (v[0] - o[0]) > -1e-6; }))) continue;
+      const cx = x + (u[0] + w[0]) / 2, cy = y + (u[1] + w[1]) / 2;
+      if (!polys.some(Q => (!Q.c || Math.hypot(Q.c[0] - cx, Q.c[1] - cy) < 2) && overlap(P, Q))) out.push([b, P]);
+    }
+    return out;
+  };
+  const rec = () => {
+    if (!F.size) return true;
+    if (++nodes > cap) return false;
+    let best, bc;
+    for (const e of F.values()) { const c = cand(e); if (!bc || c.length < bc.length) { best = e; bc = c; if (c.length < 2) break; } }
+    for (let i = bc.length - 1; i > 0; i--) { const j = (rnd() * (i + 1)) | 0; [bc[i], bc[j]] = [bc[j], bc[i]]; }
+    for (const [b, P] of bc) {
+      const saved = new Map(F), d = best[2];
+      for (const [v, dd] of [[P[0], d], [P[1], b], [P[2], (d + n) % N2], [P[3], (b + n) % N2]]) {
+        if (!F.delete(key(v[0], v[1]) + '>' + dd)) { const u = U(dd); add(v[0] + u[0], v[1] + u[1], (dd + n) % N2); }
+      }
+      tiles.push({ x: best[0], y: best[1], a: d, b }); P.c = [(P[0][0] + P[2][0]) / 2, (P[0][1] + P[2][1]) / 2]; polys.push(P);
+      if (rec()) return true;
+      tiles.pop(); polys.pop(); F.clear(); saved.forEach((v, k) => F.set(k, v));
+    }
+    return false;
+  };
+  return rec() ? { tiles, outer, hole } : null;
+}
+
+// ---- flips: a vertex with three tile corners filling 2pi centres a hexagon; each tile moves by the third spoke ----
+function sites(S, skip) {
+  const n = S.n, N2 = 2 * n, V = new Map();
+  S.tiles.forEach((t, i) => {
+    const s = (t.b - t.a + N2) % N2, ua = uv(n, t.a), ub = uv(n, t.b);
+    [[t.x, t.y, t.a, s], [t.x + ua[0], t.y + ua[1], t.b, n - s], [t.x + ua[0] + ub[0], t.y + ua[1] + ub[1], (t.a + n) % N2, s], [t.x + ub[0], t.y + ub[1], (t.b + n) % N2, n - s]]
+      .forEach(([x, y, st, w]) => { const k = key(x, y); (V.get(k) || V.set(k, []).get(k)).push([i, st, w]); });
+  });
+  const out = [];
+  V.forEach(c => { if (c.length === 3 && c[0][2] + c[1][2] + c[2][2] === N2 && !c.some(e => skip && skip.includes(e[0]))) out.push(c); });
+  return out;
+}
+function makeFlip(S, i, prev) {
+  const n = S.n, c = sites(S, prev && prev.i), pick = c[Math.floor(S.rng(i) * c.length)] || [];
+  pick.sort((p, q) => p[1] - q[1]);
+  return { i: pick.map(e => e[0]), d: pick.map((e, k) => { const s = pick[(k + 2) % 3][1]; return uv(n, s); }) };
+}
+const move = (S, r, sg) => r.i.forEach((ti, k) => { S.tiles[ti].x += sg * r.d[k][0]; S.tiles[ti].y += sg * r.d[k][1]; });
+
+function state(g, n) {
+  const k = g.seed + '|' + n, m = k + (g.live ? 'L' : 'C');
+  if (MEMO[m]) return MEMO[m];
+  if (!MEMO[k]) { let sol = null; const R = g.rng('tiling'); while (!sol) sol = solve(n, R, 400); MEMO[k] = sol; }
+  const sol = MEMO[k];
+  return (MEMO[m] = { n, tiles: sol.tiles.map(t => ({ ...t })), outer: sol.outer, hole: sol.hole, recs: [], m: 0, rng: i => g.rng('flip' + i)() });
+}
+// apply e events (loop: K flips, then their undos in reverse; live: endless flips)
+function goto(S, e, K, live) {
+  while (S.m < e) {
+    let r = S.recs[S.m];
+    if (!r) r = S.recs[S.m] = !live && S.m >= K ? { i: S.recs[2 * K - 1 - S.m].i, d: S.recs[2 * K - 1 - S.m].d.map(v => [-v[0], -v[1]]) } : makeFlip(S, S.m, S.recs[S.m - 1]);
+    move(S, r, 1); S.m++;
+  }
+  while (S.m > e) { S.m--; move(S, S.recs[S.m], -1); }
+}
+
+function draw(ctx, { g }) {
+  const P = g.params, n = P.n || [6, 5, 6][Math.floor(g.rng('n')() * 3)], N2 = 2 * n, T = g.T, live = g.live;
+  const K = Math.floor(((T - 4.2) / STEP + 1) / 2), tau = i => live ? 0.4 + i * (STEP + 0.05) : 1 + i * STEP + (i >= K ? LAG : 0);
+  const S = state(g, n), tt = live ? g.drift : g.p * T; // tt: seconds; live = the unbounded clock, loop = phase within T
+  let e = 0; if (live) e = Math.max(0, Math.floor((tt - 0.4) / (STEP + 0.05)) + 1); else while (e < 2 * K && tau(e) <= tt) e++;
+  goto(S, e, K, live);
+  const fl = []; for (let j = e - 1; j >= 0 && tau(j) + DUR > tt; j--) fl.push([S.recs[j], 1 - g.ease.sine((tt - tau(j)) / DUR)]);
+  const Rl = Math.max(...S.outer.map(v => Math.hypot(v[0], v[1]))), R = 0.345, br = 1 + 0.03 * Math.sin(g.voice(3)), sc = R / Rl * br, al = 0.25 * Math.sin(g.voice(2));
+  const co = Math.cos(al) * sc, si = Math.sin(al) * sc, X = (x, y) => co * x - si * y, Y = (x, y) => si * x + co * y;
+  const pulse = 0.6 + 0.4 * Math.sin(g.voice(4)), psi = g.voice(1);
+  const u = d => uv(n, d);
+  const cons = g.c.tint1;
+  // paper marks: axes, circles
+  g.pen(ctx, 'hair', 0.5 * pulse, cons); ctx.beginPath();
+  ctx.moveTo(0, -g.by); ctx.lineTo(0, g.by); ctx.moveTo(-g.bx, 0); ctx.lineTo(g.bx, 0);
+  for (const r of [Rl, Math.hypot(S.hole[0][0], S.hole[0][1]), Rl * Math.cos(Math.PI / N2)]) { ctx.moveTo(r * sc, 0); ctx.arc(0, 0, r * sc, 0, TAU); }
+  ctx.stroke();
+  // ---- tiles: a tile in flight is drawn twice, fading out at its old place and in at the new one ----
+  const fly = new Map(); for (const [r, k] of fl) r.i.forEach((ti, j) => fly.set(ti, [r.d[j], k]));
+  // tone: Lambert shade of each tile's facet on the stepped surface lifted to 3D (E_k = (u_k, +-0.6)), light turning with psi; the three tone classes are the rank thirds, crossfaded at their borders
+  const Ez = d => (d < n ? 0.6 : -0.6), Lx = 0.8 * Math.cos(psi), Ly = 0.8 * Math.sin(psi), nt = S.tiles.length, DK = S.dk || (S.dk = new Float64Array(nt)), LV = S.lv || (S.lv = new Float64Array(nt));
+  S.tiles.forEach((tl, i) => {
+    const A = u(tl.a), B = u(tl.b), za = Ez(tl.a), zb = Ez(tl.b), nx = A[1] * zb - za * B[1], ny = za * B[0] - A[0] * zb, nz = A[0] * B[1] - A[1] * B[0];
+    DK[i] = -(nx * Lx + ny * Ly + nz * 0.6) / Math.hypot(nx, ny, nz);
+  });
+  for (let i = 0; i < nt; i++) { let c = 0; for (let j = 0; j < nt; j++) if (DK[j] < DK[i] - 1e-9) c++; const r = c / nt; LV[i] = sm((r - 1 / 3) / 0.12 + 0.5) + sm((r - 2 / 3) / 0.12 + 0.5); }
+  const BK = Array.from({ length: 12 }, () => []), E = new Map(), GE = [[], [], [], []]; // BK: layer*4 + level, segments x1 y1 x2 y2
+  const quad = (i, x0, y0, f) => {
+    const tl = S.tiles[i], ua = u(tl.a), ub = u(tl.b), c = [[x0, y0], [x0 + ua[0], y0 + ua[1]], [x0 + ua[0] + ub[0], y0 + ua[1] + ub[1]], [x0 + ub[0], y0 + ub[1]]].map(v => [X(v[0], v[1]), Y(v[0], v[1])]);
+    const ax = c[1][0] - c[0][0], ay = c[1][1] - c[0][1], bx = c[3][0] - c[0][0], by = c[3][1] - c[0][1], nA = Math.max(1, Math.floor(Math.abs(ax * by - ay * bx) / Math.hypot(ax, ay) / (P.pitch * 1.4)));
+    for (let k = 0; k < 4; k++) { const a = c[k], b = c[(k + 1) % 4]; if (f < 1) GE[Math.min(3, Math.floor(f * 4))].push(a[0], a[1], b[0], b[1]); else { const ka = key(a[0], a[1]), kb = key(b[0], b[1]); E.set(ka < kb ? ka + kb : kb + ka, [a[0], a[1], b[0], b[1]]); } }
+    const w = [1, Math.min(1, LV[i]), Math.max(0, LV[i] - 1)];
+    const nD = Math.max(1, Math.floor(Math.hypot(bx - ax, by - ay) / (P.pitch * 0.8)));
+    for (let l = 0; l < 3; l++) for (let k = 0, cnt = l === 2 ? nD : nA; k < cnt; k++) { // tone 0: lines along a; tone 1: the same again, half a step over; tone 2: plus diagonal lines across
+      const hs = hash(i, l, k), v = w[l] * f * (0.55 + 0.9 * hs); if (v < 0.2) continue;
+      const a0 = 0.02 + 0.05 * hs, a1 = 0.98 - 0.05 * ((hs * 7) % 1), B = BK[l * 4 + Math.min(3, Math.floor(v * 3))];
+      let s0, s1, t0, t1;
+      if (l === 2) { const cc = -1 + 2 * (k + 0.5) / nD, lo = Math.max(0, -cc), hi = Math.min(1, 1 - cc); s0 = lo + (hi - lo) * a0; s1 = lo + (hi - lo) * a1; t0 = s0 + cc; t1 = s1 + cc; }
+      else { const sh = (k + (l ? 0.75 : 0.25)) / nA; s0 = a0; s1 = a1; t0 = t1 = sh; }
+      B.push(c[0][0] + s0 * ax + t0 * bx, c[0][1] + s0 * ay + t0 * by, c[0][0] + s1 * ax + t1 * bx, c[0][1] + s1 * ay + t1 * by);
+    }
+  };
+  S.tiles.forEach((tl, i) => { const F = fly.get(i); if (!F) quad(i, tl.x, tl.y, 1); else { quad(i, tl.x - F[0][0], tl.y - F[0][1], F[1]); quad(i, tl.x, tl.y, 1 - F[1]); } });
+  const cols = g.c.accent === g.c.ink ? [g.c.ink, g.c.ink, g.c.ink] : [g.c.cool, g.c.third, g.c.ink], base = [0.75, 0.8, 0.85];
+  const stroke = (B, w, a, col) => { if (!B.length) return; g.pen(ctx, w, a, col); ctx.beginPath(); for (let i = 0; i < B.length; i += 4) { ctx.moveTo(B[i], B[i + 1]); ctx.lineTo(B[i + 2], B[i + 3]); } ctx.stroke(); };
+  BK.forEach((B, b) => stroke(B, 'fine', base[b >> 2] * (0.35 + 0.65 * ((b & 3) + 1) / 4), cols[b >> 2]));
+  // ---- ring construction: spokes, side ticks, chords of the hole ----
+  g.pen(ctx, 'hair', 0.6 * pulse, cons); ctx.beginPath();
+  const ext = 0.08 / sc, seg = (a, b, c, d) => { ctx.moveTo(X(a, b), Y(a, b)); ctx.lineTo(X(c, d), Y(c, d)); };
+  for (let k = 0; k < n; k++) { const v = S.outer[2 * k], r = 1 + ext / Math.hypot(v[0], v[1]); seg(v[0] * r, v[1] * r, -v[0] * r, -v[1] * r); }
+  for (let k = 0; k < N2; k++) { // at each corner, extend the incoming and the outgoing side
+    const v = S.outer[2 * k], ui = u(S.outer[(2 * k + 4 * n - 1) % (4 * n)][2]), uo = u(v[2]), L = 0.9;
+    seg(v[0], v[1], v[0] + ui[0] * L, v[1] + ui[1] * L); seg(v[0], v[1], v[0] - uo[0] * L, v[1] - uo[1] * L);
+  }
+  const hv = S.hole.filter((_, i) => n % 2 || i % 2 === 0);
+  for (let i = 0; i < hv.length; i++) for (let j = i + 2; j < hv.length; j++) seg(hv[i][0], hv[i][1], hv[j][0], hv[j][1]);
+  ctx.stroke();
+  // ---- outlines, every edge once ----
+  stroke([...E.values()].flat(), 'line', 0.9, g.c.ink); GE.forEach((B, q) => stroke(B, 'line', 0.9 * (q + 0.5) / 4, g.c.ink));
+}
+
+const mountPiece = (el, o) => mount(el, { piece: { meta, draw }, ...o });
+(window.genart ||= {}).mount ??= mountPiece;
+export { meta,draw,render,theme,exportPNG,exportWebm,exportFrames, mountPiece as mount };

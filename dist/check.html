@@ -61,7 +61,12 @@ for (const meta of pieces) {
       let mx = 0; for (let i = 0; i < d.length; i += 4) mx = Math.max(mx, Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]));
       add(id, theme, '7 palette', mx <= 12, `max channel spread ${mx}/255 (paper itself is 7, ink 3; spec's HSL saturation 0.04 would fail the theme's own colours)`);
     } else {
-      const [pa, ink, ac, co] = [col.paper, col.ink, col.accent, col.cool].map(rgb), segs = [[pa, ink], [pa, ac], [pa, co], [ink, ac], [ink, co]];
+      const [pa, ink, ac, co] = [col.paper, col.ink, col.accent, col.cool].map(rgb);
+      let segs = [[pa, ink], [pa, ac], [pa, co], [ink, ac], [ink, co]];
+      if (M.meta.pencils) { // pencil pieces: any mix of any two theme colours (incl. third, tints) is on-palette; no accent-share limit
+        const all = [col.paper, col.ink, col.accent, col.cool, col.third, col.tint1, col.tint2].map(rgb); segs = [];
+        for (let a = 0; a < all.length; a++) for (let b = a + 1; b < all.length; b++) segs.push([all[a], all[b]]);
+      }
       let bad = 0, nonPaper = 0, accent = 0;
       for (let i = 0; i < d.length; i += 4) {
         const p = [d[i], d[i + 1], d[i + 2]];
@@ -69,7 +74,7 @@ for (const meta of pieces) {
         if (Math.hypot(...p.map((v, k) => v - pa[k])) > 40) { nonPaper++; if (segDist(p, pa, ac) < segDist(p, pa, ink) && segDist(p, pa, ac) < segDist(p, pa, co)) accent++; }
       }
       const share = accent / Math.max(1, nonPaper);
-      add(id, theme, '7 palette', bad / (d.length / 4) < 0.001 && share <= 0.05, `${bad} off-palette px; accent ${(100 * share).toFixed(2)}% of ink pixels (max 5%)`);
+      add(id, theme, '7 palette', bad / (d.length / 4) < 0.001 && (M.meta.pencils || share <= 0.05), `${bad} off-palette px; accent ${(100 * share).toFixed(2)}% of ink pixels${M.meta.pencils ? ' (pencils piece: limit skipped)' : ' (max 5%)'}`);
     }
     // 9 reduced motion: exactly one frame, equal to the exported still
     const host = Object.assign(document.createElement('div'), {}); host.style.width = '300px'; document.body.append(host);

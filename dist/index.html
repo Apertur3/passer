@@ -16,8 +16,14 @@ nav figure{margin:0;flex:none;cursor:pointer;opacity:.75}
 nav figure.on{opacity:1;outline:1px solid currentColor;outline-offset:3px}
 nav figcaption{font-size:11px;padding-top:4px;white-space:nowrap}
 nav div{position:relative;height:88px;overflow:hidden}
+nav[hidden]{display:none}
+#lnav{flex-wrap:wrap;gap:6px}
+#lnav button{font-size:12px;padding:2px 8px}
+#lnav button.on{outline:2px solid currentColor;font-weight:600}
 </style>
 <header><b>genart</b>
+<label>source <select id="src"><option value="">main</option></select></label>
+<label title="Local sources: also list .iterN.html copies"><input type="checkbox" id="iters" style="padding:0"> iterations</label>
 <label>theme <select id="theme"><option>mono<option>fieldnotes<option>night</select></label>
 <label>aspect <select id="aspect"><option>4:5<option>16:9<option>1:1</select></label>
 <label>seed <input id="seed" value="1" size="6"></label>
@@ -28,11 +34,14 @@ nav div{position:relative;height:88px;overflow:hidden}
 <span id="info"></span></header>
 <main id="stage"></main>
 <nav id="nav"></nav>
+<nav id="lnav" hidden></nav>
 <script type="module">
 const $ = id => document.getElementById(id), stage = $('stage'), nav = $('nav'), info = $('info');
 const BG = { mono: '#d9d7d2', fieldnotes: '#d9d8d3', night: '#08090b' }, FG = { mono: '#1B1A18', fieldnotes: '#141518', night: '#EAE7E0' };
 const H = new URLSearchParams(location.hash.slice(1));
 for (const k of ['theme', 'aspect', 'seed']) if (H.has(k)) $(k).value = H.get(k);
+// local-model source (files under dist/local/<label>/, a git-excluded symlink to ../out); the default mode is untouched
+let lsrc = H.get('src') || '', lfiles = [], lcur = H.get('file') || '', lsig = '', lframe = null; const ltags = new Map();
 let pieces = [], cur = H.get('piece') || '', live = null, liveBytes = 0, stale = false, listed = '';
 const thumbs = new Map();
 const load = p => import(`./${p.module}?b=${p.bytes}`);
@@ -48,6 +57,7 @@ async function mountThumb(t) { // static still of one piece; only called when th
     t.box.style.width = 88 * aw / ah + 'px'; t.mod?.destroy(); t.mod = m.mount(t.box, { ...o, t: t.p.still * t.p.T }); } catch {}
 }
 async function show(thumbsToo = true) { // (re)mount the live piece; the poll never calls this by itself
+  if (lsrc) { if (thumbsToo) showLocal(); return; } // local-model source: iframes, see below
   const p = pieces.find(p => p.id === cur) || pieces[0]; if (!p) return;
   cur = p.id; live?.destroy(); live = null;
   const o = opts(); document.body.style.background = BG[o.theme]; document.body.style.color = FG[o.theme];
@@ -92,8 +102,37 @@ const err = m => { lastErr = String(m).slice(0, 120); };
 addEventListener('error', e => err(e.message)); addEventListener('unhandledrejection', e => err(e.reason?.message || e.reason));
 function blank() { try { pctx.drawImage(live.canvas, 0, 0, 32, 40); const d = pctx.getImageData(0, 0, 32, 40).data, l = []; for (let i = 0; i < d.length; i += 4) l.push(d[i] + d[i + 1] + d[i + 2]);
   const sorted = [...l].sort((a, b) => a - b), med = sorted[l.length >> 1]; blankN = l.some(v => Math.abs(v - med) > 12) ? 0 : blankN + 1; } catch {} return blankN >= 4; }
-let n0 = 0; setInterval(() => { if (!live) return; const f = live.frames, p = pieces.find(p => p.id === cur);
+let n0 = 0; setInterval(() => { if (lsrc) { info.textContent = `local ${lsrc}/${lcur} ${ltags.get(lcur) || ''} (${lfiles.indexOf(lcur) + 1}/${lfiles.length}) · ← → file, the page animates on its own and may ignore theme/aspect/seed`; return; } if (!live) return; const f = live.frames, p = pieces.find(p => p.id === cur);
   info.textContent = `${p.title}${p.math ? ' [' + p.math + ']' : ''} (loop ${p.T}s) · speed ${spd().toFixed(2)}x · q ${live.q.toFixed(2)} · ${live.canvas.dataset.state} · ${(f - n0) * 2} fps · ${matchMedia('(prefers-reduced-motion: reduce)').matches ? 'system Reduce Motion is ON' : 'Reduce Motion off'} · keys: ← → piece, t theme, a aspect, s seed, f fullscreen, r reload this piece${stale ? ' · NEW BUILD of this piece: press r' : ''}${blank() ? ' · BLANK?' : ''}${lastErr ? ' · ERR: ' + lastErr : ''}`; n0 = f; }, 500);
+// ---- local source
+const ls = async path => { const r = await fetch(path + '?' + Date.now()); if (!r.ok) throw 0; const d = new DOMParser().parseFromString(await r.text(), 'text/html');
+  return [...d.querySelectorAll('a')].map(a => decodeURIComponent(a.getAttribute('href') || '')).filter(h => h && !/^([?#/.]|[a-z]+:)/.test(h)); };
+function renderLNav() { const n = $('lnav'); n.textContent = ''; for (const f of lfiles) { const b = document.createElement('button'); b.textContent = f.replace(/\.html$/, '') + (ltags.get(f) ? ' [' + ltags.get(f) + ']' : ''); b.classList.toggle('on', f === lcur); b.onclick = () => { lcur = f; showLocal(); }; n.append(b); } }
+function fitFrame() { if (!lframe) return; const R = stage.getBoundingClientRect(), [aw, ah] = $('aspect').value.split(':').map(Number), w = Math.min(R.width, R.height * aw / ah); lframe.style.width = w + 'px'; lframe.style.height = w * ah / aw + 'px'; }
+function showLocal() {
+  if (!lsrc || !lcur) return; const o = opts(); stage.textContent = ''; document.body.style.background = BG[o.theme]; document.body.style.color = FG[o.theme];
+  const f = lframe = document.createElement('iframe'); f.style.cssText = 'border:0;background:' + BG[o.theme]; f.title = lcur;
+  f.src = `local/${lsrc}/${lcur}?` + new URLSearchParams({ theme: o.theme, aspect: o.aspect, seed: o.seed }); stage.append(f); fitFrame();
+  history.replaceState(null, '', '#' + new URLSearchParams({ src: lsrc, file: lcur, theme: o.theme, aspect: o.aspect, seed: o.seed }));
+  const name = lcur; f.onload = () => setTimeout(() => { if (lframe !== f) return; let tag = ''; try { const d = f.contentDocument, cs = [...d.querySelectorAll('canvas')];
+    if (!cs.length) tag = d.querySelector('svg') ? '' : 'no canvas'; else { const c = cs.sort((a, b) => b.width * b.height - a.width * a.height)[0], p = Object.assign(document.createElement('canvas'), { width: 32, height: 40 }), x = p.getContext('2d', { willReadFrequently: true });
+      x.drawImage(c, 0, 0, 32, 40); const px = x.getImageData(0, 0, 32, 40).data, l = []; for (let i = 0; i < px.length; i += 4) l.push(px[i] + px[i + 1] + px[i + 2]); const m = [...l].sort((a, b) => a - b)[l.length >> 1]; tag = l.some(v => Math.abs(v - m) > 12) ? '' : 'blank'; } } catch {}
+    ltags.set(name, tag); renderLNav(); }, 3000);
+  renderLNav();
+}
+async function pollLocal() { try {
+  const labels = (await ls('local/')).filter(h => h.endsWith('/')).map(h => h.slice(0, -1)), sel = $('src');
+  if (labels.join() !== [...sel.options].slice(1).map(o => o.value).join()) { sel.length = 1; for (const l of labels) sel.add(new Option(l, l)); sel.value = lsrc; }
+  if (lsrc) { const fs = (await ls(`local/${lsrc}/`)).filter(f => f.endsWith('.html') && ($('iters').checked || !/\.iter\d+\.html$/.test(f))), sig = fs.join();
+    if (sig !== lsig) { lsig = sig; lfiles = fs; if (!fs.includes(lcur)) { lcur = fs[0] || ''; showLocal(); } else if (!lframe) showLocal(); else renderLNav(); } } } catch {} }
+function setSource(v) { lsrc = v; lsig = ''; lfiles = []; $('lnav').hidden = !v; nav.hidden = !!v;
+  if (v) { live?.destroy(); live = null; stage.textContent = ''; lcur = ''; pollLocal(); } else { lframe = null; stage.textContent = ''; show(false); } }
+$('src').onchange = () => setSource($('src').value); $('iters').onchange = () => { lsig = ''; pollLocal(); };
+new ResizeObserver(fitFrame).observe(stage);
+addEventListener('keydown', e => { if (!lsrc || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || !/^Arrow(Left|Right)$/.test(e.key)) return; e.stopImmediatePropagation();
+  const i = lfiles.indexOf(lcur); if (lfiles.length) { lcur = lfiles[(i + (e.key === 'ArrowRight' ? 1 : lfiles.length - 1)) % lfiles.length]; showLocal(); } }, true);
+if (lsrc) { $('lnav').hidden = false; nav.hidden = true; }
+pollLocal(); setInterval(pollLocal, 5000);
 poll(); setInterval(poll, 5000);
 // BENCH MODE: #bench=1 cycles every piece live (2 s warm-up, 10 s measured) and POSTs one JSON text per piece to :48302/log
 if (H.has('bench')) (async () => {

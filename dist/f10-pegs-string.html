@@ -111,7 +111,7 @@ function paper(g) {
   const cv = document.createElement('canvas'); cv.width = g.w; cv.height = g.h;
   const ctx = cv.getContext('2d'), r = g.rng('dust'), n = (r() * 41) | 0;
   ctx.fillStyle = g.c.paper; ctx.fillRect(0, 0, g.w, g.h); ctx.fillStyle = g.c.ink;
-  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.3 + 0.4 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0004 + 0.0008 * r()), 0, 7); ctx.fill(); }
+  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.15 + 0.25 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0003 + 0.0002 * r()), 0, 7); ctx.fill(); } // owner: large dark specks must go: tiny and faint only
   const k0 = Math.max(1, g.S / 1000); ctx.globalCompositeOperation = 'soft-light';
   [[241, 1, 0.10 * GK], [257, 3, 0.06 * GK]].forEach(([sz, m, a]) => {
     const p = ctx.createPattern(tile(sz, g.seed, 127), 'repeat'); p.setTransform(new DOMMatrix().scale(k0 * m));
@@ -245,86 +245,48 @@ async function exportFrames(piece, o = {}, fps = 30) { // needs a user gesture f
 }
 function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e4); }
 
-// F10 Pegs and string (after Dmitri Cherniak's wrapped strings, with the old times-table envelope).
-// One rule: one long string runs from peg to peg around a ring of pegs in a peg lattice, each far end sliding a few pegs along the ring in a slow rolling wave.
+// F10 Pegs and string (times table on a circle, in the manner of string art and Dmitri Cherniak's wrapped strings).
+// One rule: every peg i on a ring is joined by a straight string to peg k*i, while the multiplier k slowly sweeps up and back.
 const meta = {
-  id: 'f10-pegs-string', title: 'Pegs and string', T: 16, start: 0.25, still: 0.3, aspects: ['4:5', '16:9', '1:1'],
-  label: 'One long thin string wrapped peg to peg around the border of a lattice of pegs, drawing curved envelopes that slowly ripple as its far ends slide along the ring.',
-  // across: lattice pegs across the circle; ring: pegs on the circle; mult: times-table multiplier (peg i is joined to peg mult*i);
-  // spread: how far the multiplier travels in a loop; wrap: peg wrap radius (S)
-  params: { across: 25, ring: 120, mult: 3, spread: 0.2, wrap: 0.0028 },
+  id: 'f10-pegs-string', title: 'Pegs and string', T: 64, speed: 0.8, start: 0.25, still: 0.12, aspects: ['4:5', '16:9', '1:1'],
+  math: 'chord from peg i to peg (k * i) mod N for every peg i; k sweeps continuously from 2 up to 2 + range and back, lingering near whole numbers (cardioid at 2, nephroid at 3, then 3, 4 and 5 cusps)',
+  label: 'Pegs on a ring, each joined by a straight thin string to the peg at k times its number, while k sweeps slowly so the glowing envelope curves (cardioid, nephroid and more) bloom and fold into one another.',
+  // ring: pegs on the circle; range: how far k travels above 2 (the lowest value of the sweep); linger: how long k lingers near whole numbers (0..0.9);
+  // offset: gap between the ink table and the cool table (in k)
+  params: { ring: 200, range: 1.0, linger: 0.6, offset: 0.035 },
 };
 
-const TAU = Math.PI * 2, mod = (a, n) => ((a % n) + n) % n, wrapPi = a => mod(a + Math.PI, TAU) - Math.PI;
-const PEGS = new Map();
+const TAU = Math.PI * 2, PEGS = new Map();
 
-// the peg lattice inside a circle, and the ring of border pegs on that circle (clockwise from the top)
-function layout(g) {
-  const R = Math.min(g.bx, g.by), N = g.params.ring, pitch = (2 * R) / (g.params.across - 1), ring = [];
-  for (let k = 0; k < N; k++) ring.push([R * Math.sin((TAU * k) / N), -R * Math.cos((TAU * k) / N)]);
-  return { R, N, pitch, ring };
-}
-
-// the static layer (pegs) is painted once per size and theme into an offscreen canvas
-function pegLayer(g, L) {
+// the ring of pegs is static: painted once per size and theme into an offscreen canvas
+function pegLayer(g, R, N) {
   if (typeof document === 'undefined') return null;
-  const key = [g.seed, g.w, g.h, g.c.ink, g.c.paper, L.R, L.N].join('|');
+  const key = [g.seed, g.w, g.h, g.c.ink, g.c.paper, R, N].join('|');
   if (PEGS.has(key)) return PEGS.get(key);
   const cv = document.createElement('canvas'); cv.width = g.w; cv.height = g.h;
-  const c = cv.getContext('2d'); c.setTransform(g.S, 0, 0, g.S, g.w / 2, g.h / 2);
-  c.fillStyle = g.c.tint1; c.globalAlpha = 1; c.beginPath();
-  const m = Math.floor(L.R / L.pitch);
-  for (let i = -m; i <= m; i++) for (let j = -m; j <= m; j++) {
-    const x = i * L.pitch, y = j * L.pitch;
-    if (Math.hypot(x, y) < L.R - L.pitch * 0.6) { c.moveTo(x + 0.0018, y); c.arc(x, y, 0.0018, 0, 7); }
-  }
-  c.fill(); c.fillStyle = g.c.ink; c.globalAlpha = 0.9; c.beginPath();
-  L.ring.forEach(([x, y]) => { c.moveTo(x + 0.0022, y); c.arc(x, y, 0.0022, 0, 7); });
+  const c = cv.getContext('2d'); c.setTransform(g.S, 0, 0, g.S, g.w / 2, g.h / 2); c.fillStyle = g.c.ink; c.globalAlpha = 0.9; c.beginPath();
+  for (let i = 0; i < N; i++) { const x = R * Math.sin((TAU * i) / N), y = -R * Math.cos((TAU * i) / N); c.moveTo(x + 0.0018, y); c.arc(x, y, 0.0018, 0, 7); }
   c.fill();
   if (PEGS.size > 6) PEGS.delete(PEGS.keys().next().value);
   PEGS.set(key, cv); return cv;
 }
 
-// heading of the straight run from circle a (side sa) to circle b (side sb); side +1 turns with increasing angle
-const heading = (a, b, sa, sb, rw) => {
-  const dx = b[0] - a[0], dy = b[1] - a[1], phi = Math.atan2(dy, dx), d = Math.hypot(dx, dy);
-  return sa === sb || d < 2 * rw ? phi : phi + Math.asin(Math.min(1, (2 * sa * rw) / d));
-};
-
 function draw(ctx, { g }) {
-  const P = g.params, L = layout(g), ring = L.ring, N = L.N, rw = P.wrap, p = g.p, vo = g.voice || (k => k * g.theta);
-  const lay = pegLayer(g, L);
+  const P = g.params, N = P.ring, R = Math.min(g.bx, g.by), vo = g.voice || (k => k * g.theta);
+  const lay = pegLayer(g, R, N);
   if (lay) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(lay, 0, 0); ctx.restore(); }
-  else { ctx.fillStyle = g.c.ink; ctx.beginPath(); ring.forEach(([x, y]) => { ctx.moveTo(x + 0.0022, y); ctx.arc(x, y, 0.0022, 0, 7); }); ctx.fill(); }
-  const at = u => [L.R * Math.sin((TAU * u) / N), -L.R * Math.cos((TAU * u) / N)]; // a partner position, in fractional pegs
-  // vertices: peg i, then its partner mult*i on the border; the string goes peg i -> partner -> peg i+1 -> partner ...
-  // each partner slides a few pegs along the ring; the slide runs as a wave once around the ring per loop
-  const spread = P.spread * (0.8 + 0.2 * Math.cos(vo(2))), m0 = P.mult + 0.015 * Math.sin(vo(3)); // spread and multiplier drift on their own voices
-  const V = [], B = [];
-  for (let i = 1; i < N; i++) {
-    const w = 0.5 - 0.5 * Math.cos(TAU * (p - (0.9 * i) / N));
-    V.push(ring[i], at((m0 + spread * w) * i)); B.push(ring[i], at(m0 * i));
-  }
-  const n = V.length, side = B.map((c, k) => {
-    const a = B[Math.max(0, k - 1)], b = B[Math.min(n - 1, k + 1)];
-    return Math.sign((c[0] - a[0]) * (b[1] - c[1]) - (c[1] - a[1]) * (b[0] - c[0])) || 1;
-  });
-  const hd = [];
-  for (let k = 0; k < n - 1; k++) hd.push(heading(V[k], V[k + 1], side[k], side[k + 1], rw));
-  const seg = k => { // append run k plus the wrap on the peg it arrives at
-    const a = V[k], s = side[k], th0 = hd[k] - s * Math.PI / 2, b = V[k + 1], s1 = side[k + 1], th1 = hd[k] - s1 * Math.PI / 2;
-    ctx.moveTo(a[0] + rw * Math.cos(th0), a[1] + rw * Math.sin(th0)); ctx.lineTo(b[0] + rw * Math.cos(th1), b[1] + rw * Math.sin(th1));
-    if (k + 1 < n - 1) {
-      const turn = wrapPi(hd[k + 1] - hd[k]); let sw = s1 * turn >= -0.6 * Math.PI ? turn : turn + s1 * TAU;
-      if (s1 * sw < 0 && s1 * sw > -0.6 * Math.PI) sw = turn;
-      ctx.arc(b[0], b[1], rw, th1, th1 + sw, sw < 0);
+  // the sweep: cosine up and back; its range breathes on another voice (live mode: never the same twice); k lingers near whole numbers
+  const u = 0.5 - 0.5 * Math.cos(g.theta), A = P.range * (0.65 + 0.35 * Math.cos(vo(2))) * (1 + 0.7 * (0.5 - 0.5 * Math.cos(vo(3))));
+  const x = 1.88 + 0.5 * (0.5 - 0.5 * Math.cos(vo(4) + 1)) + A * u, k = x - (P.linger * Math.sin(TAU * x)) / TAU;
+  const px = i => R * Math.sin((TAU * i) / N), py = i => -R * Math.cos((TAU * i) / N);
+  // two tables: ink at k, a fainter ink table at k + offset; four alpha groups each so crossings build the glow
+  for (let layer = 0; layer < 2; layer++) {
+    const kk = k + layer * P.offset;
+    for (let b = 0; b < 4; b++) {
+      ctx.beginPath();
+      for (let i = 1 + b; i < N; i += 4) { const t = kk * i; ctx.moveTo(px(i), py(i)); ctx.lineTo(px(t), py(t)); }
+      g.pen(ctx, 'hair', layer ? 0.4 : 0.62, g.c.ink); ctx.stroke();
     }
-  };
-  // two line systems (the outbound runs in ink, the return runs in the cool colour), four alpha groups each, so crossings build density
-  for (let layer = 0; layer < 2; layer++) for (let b = 0; b < 4; b++) {
-    ctx.beginPath();
-    for (let k = layer; k < n - 1; k += 2) if (((k >> 1) & 3) === b) seg(k);
-    g.pen(ctx, 'hair', 0.72, layer ? g.c.cool : g.c.ink); ctx.stroke();
   }
 }
 

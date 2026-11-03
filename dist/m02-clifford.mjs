@@ -106,7 +106,7 @@ function paper(g) {
   const cv = document.createElement('canvas'); cv.width = g.w; cv.height = g.h;
   const ctx = cv.getContext('2d'), r = g.rng('dust'), n = (r() * 41) | 0;
   ctx.fillStyle = g.c.paper; ctx.fillRect(0, 0, g.w, g.h); ctx.fillStyle = g.c.ink;
-  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.3 + 0.4 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0004 + 0.0008 * r()), 0, 7); ctx.fill(); }
+  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.15 + 0.25 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0003 + 0.0002 * r()), 0, 7); ctx.fill(); } // owner: large dark specks must go: tiny and faint only
   const k0 = Math.max(1, g.S / 1000); ctx.globalCompositeOperation = 'soft-light';
   [[241, 1, 0.10 * GK], [257, 3, 0.06 * GK]].forEach(([sz, m, a]) => {
     const p = ctx.createPattern(tile(sz, g.seed, 127), 'repeat'); p.setTransform(new DOMMatrix().scale(k0 * m));
@@ -240,24 +240,22 @@ async function exportFrames(piece, o = {}, fps = 30) { // needs a user gesture f
 }
 function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e4); }
 
-// M02 Clifford attractor (a plane map iterated, drawn as dust).
-// One rule: the map x' = sin(a y) + c cos(a x), y' = sin(b x) + d cos(b y) folds a lattice of points onto a thin filigree, and density alone gives the tone.
+// M02 Clifford attractor (a plane map iterated, drawn as a swarm).
+// One rule: the map x' = sin(a y) + c cos(a x), y' = sin(b x) + d cos(b y) folds a lattice of points onto a thin filigree, and a swarm of particles hops along it, so density gives the tone.
 const meta = {
   id: 'm02-clifford', title: 'Clifford attractor', T: 12, still: 0.1, start: 0.25, dprMax: 1, aspects: ['4:5', '16:9', '1:1'],
   math: "x' = sin(a y) + c cos(a x),  y' = sin(b x) + d cos(b y);  (a, b) walk a small circle",
-  label: 'A fixed lattice of points pushed through the Clifford map eight times lands on a folded filigree; the parameters walk a small circle so the cloud unfolds and refolds, with a second, smaller attractor in the cool colour.',
+  label: 'A swarm of particles hopping along a Clifford attractor, each leaving a short comet trail, while the map parameters walk a small circle so the filigree unfolds and refolds; a second, smaller attractor streams beside it.',
   // seeds: lattice points per big attractor; eps: radius of the parameter circle; dwell: seconds before the live piece moves on to another attractor
-  params: { seeds: 8000, eps: 0.07, dwell: 50 },
+  params: { seeds: 6500, eps: 0.07, dwell: 50 },
 };
 
 // attractors known to stay rich in a neighbourhood of (a, b): a, b, c, d
 const FAM = [[-1.4, 1.6, 1.0, 0.7], [1.7, 1.7, 0.6, 1.2], [1.5, -1.8, 1.6, 0.9], [-1.7, 1.8, -1.9, -0.4], [-1.8, -2.0, -0.5, -0.9], [1.7, 1.3, -0.1, -1.21]];
-const TAU = Math.PI * 2, K = 8, KEEP = 5; // iterations per lattice point; the last KEEP iterates are drawn
-const SC = { w: 0, h: 0, cv: null, ctx: null, img: null, u32: null, cA: null, cB: null, hit: null, nh: 0, sx: null, sy: null, box: {} };
-const ALPHA = [0.4, 0.55]; // alpha of one hit: big attractor, small attractor
+const TAU = Math.PI * 2, K = 8, NC = 8; // K: iterations used to measure the attractor's extent; NC: hops per particle per loop
+const SC = { sx: null, sy: null, box: {} };
 const TB = new Float64Array(4097), INV = 4096 / TAU; for (let i = 0; i <= 4096; i++) TB[i] = Math.sin(i / INV);
 const sn = v => { const u = (v + 25.2) * INV, i = u | 0, f = u - i; return TB[i & 4095] * (1 - f) + TB[(i & 4095) + 1] * f; }; // sine from a table, |v| < 25, error 3e-7
-const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 
 function lattice(N) { // R2 low-discrepancy sequence on [-1, 1]^2, built once
   if (SC.sx && SC.sx.length >= N) return;
@@ -278,66 +276,50 @@ function box(k) {
   return (SC.box[k] = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, hx: (x1 - x0) / 2 * 1.04, hy: (y1 - y0) / 2 * 1.04 });
 }
 
-function draw(ctx, { g }) {
-  const P = g.params, q = Math.min(1, g.q ?? 1), w = g.w, h = g.h, S = g.S, N = Math.round(P.seeds * q), live = g.live;
+function draw(ctx, { g, t }) {
+  const P = g.params, q = Math.min(1, g.q ?? 1), N = Math.round(P.seeds * q), live = g.live, NL = SC.sx ? 0 : 0;
   lattice(P.seeds);
   const sm = g.ease.smoother;
-  // layers: which family member, where, how big, how much of its lattice shows (live: a slow hand-over to another attractor)
-  const pick = (r, k) => { r = g.rng('pick' + k); return Math.floor(r() * FAM.length); };
+  const pick = (k) => Math.floor(g.rng('pick' + k)() * FAM.length);
   const layers = [], aw = g.bx, ah = g.by * 0.85, small = 0.46;
   const addLayer = (kind, member, amount) => { if (amount > 0.004) layers.push({ kind, member, amount }); };
   if (live) {
     for (const kind of [0, 1]) {
       const s = g.drift / P.dwell + kind * 0.43, k = Math.floor(s), f = s - k, wgt = sm((f - 0.75) / 0.25);
-      let m0 = pick(0, kind * 100 + k), m1 = pick(0, kind * 100 + k + 1); if (m1 === m0) m1 = (m1 + 1) % FAM.length;
+      const m0 = pick(kind * 100 + k); let m1 = pick(kind * 100 + k + 1); if (m1 === m0) m1 = (m1 + 1) % FAM.length;
       addLayer(kind, m0, 1 - wgt); addLayer(kind, m1, wgt);
     }
-  } else { addLayer(0, pick(0, 0), 1); addLayer(1, (pick(0, 0) + 2 + (pick(0, 1) % 3)) % FAM.length, 1); }
-  const pts = typeof document === 'undefined'; // headless motion test: no canvas, report a sample of dots instead
-  if (!pts && (SC.w !== w || SC.h !== h)) {
-    SC.w = w; SC.h = h; SC.cv = document.createElement('canvas'); SC.cv.width = w; SC.cv.height = h; SC.ctx = SC.cv.getContext('2d');
-    SC.img = SC.ctx.createImageData(w, h); SC.u32 = new Uint32Array(SC.img.data.buffer); SC.cA = new Uint8Array(w * h); SC.cB = new Uint8Array(w * h); SC.hit = new Int32Array(w * h);
-  }
-  const { cA, cB, hit, u32 } = SC, k = Math.max(1, Math.round(S / 900)); let nh = 0, minx = w, miny = h, maxx = 0, maxy = 0;
-  const e = P.eps;
+  } else { addLayer(0, pick(0), 1); addLayer(1, (pick(0) + 2 + (pick(1) % 3)) % FAM.length, 1); }
+  const Tc = g.T / NC, r0 = Math.max(0.0019, 1.3 / g.S), NS = P.seeds;
+  g.pen(ctx, 'hair', 1); ctx.fillStyle = g.c.ink; ctx.strokeStyle = g.c.ink; 
   for (const L of layers) {
     const [a0, b0, c, d] = FAM[L.member], bx = box(L.member), kind = L.kind;
-    // the parameter point walks a small circle (loop: one turn per loop; live: two voices that slip against each other)
-    const ph = kind ? g.voice(2) + 1.7 : g.voice(1), pb = kind ? g.voice(1) + 4 : g.voice(2) + 0.6;
-    const a = a0 + e * Math.cos(ph) * (kind ? 0.8 : 1), b = b0 + e * Math.sin(ph) * (kind ? 0.8 : 1) + 0.4 * e * Math.sin(pb);
-    const Bm = 1 + Math.max(Math.abs(c), Math.abs(d)), s0 = Math.min(aw / bx.hx, ah / bx.hy), s1 = Math.min(aw / bx.hy, ah / bx.hx), rot = s1 > s0, sc = Math.max(s0, s1) * (kind ? small : 1); // turn the attractor a quarter if that fills the page better
-    const ox = kind ? 0.35 * g.bx : 0, oy = kind ? 0.42 * g.by : -0.08 * g.by; // the small one sits low and right, half overlapping
-    const n = Math.round(N * L.amount * (kind ? 0.45 : 1)), grid = kind ? cB : cA;
+    const ph = kind ? g.voice(2) + 1.7 : g.voice(1), pb = kind ? g.voice(1) + 4 : g.voice(2) + 0.6, e = P.eps * (kind ? 0.8 : 1);
+    const a = a0 + e * Math.cos(ph), b = b0 + e * Math.sin(ph) + 0.4 * e * Math.sin(pb);
+    const Bm = 1 + Math.max(Math.abs(c), Math.abs(d)), s0 = Math.min(aw / bx.hx, ah / bx.hy), s1 = Math.min(aw / bx.hy, ah / bx.hx), rot = s1 > s0, sc = Math.max(s0, s1) * (kind ? small : 1);
+    const ox = kind ? 0.35 * g.bx : 0, oy = kind ? 0.42 * g.by : -0.08 * g.by, rk = r0 * (kind ? 0.85 : 1);
+    const n = Math.round(N * L.amount * (kind ? 0.45 : 1));
+    const buf = [[], [], []]; // particles in three size classes, each class stroked once: a capsule is the dot plus its comet trail
     for (let i = 0; i < n; i++) {
-      let x = SC.sx[i] * Bm, y = SC.sy[i] * Bm;
-      for (let j = 0; j < K; j++) {
-        const nx = sn(a * y) + c * sn(a * x + 1.5707963); y = sn(b * x) + d * sn(b * y + 1.5707963); x = nx;
-        if (j < K - KEEP) continue;
-        const dx = x - bx.cx, dy = y - bx.cy, X = (rot ? -dy : dx) * sc + ox, Y = (rot ? dx : dy) * sc + oy;
-        if (pts) { if (i % 50 === 0) ctx.rect(X, Y, 0, 0); continue; }
-        const ix = Math.round(w / 2 + X * S - k / 2), iy = Math.round(h / 2 + Y * S - k / 2);
-        if (ix < 0 || iy < 0 || ix + k > w || iy + k > h) continue;
-        for (let yy = 0; yy < k; yy++) for (let xx = 0; xx < k; xx++) {
-          const o = (iy + yy) * w + ix + xx;
-          if (!(cA[o] | cB[o])) hit[nh++] = o;
-          if (grid[o] < 255) grid[o]++;
-        }
-        if (ix < minx) minx = ix; if (iy < miny) miny = iy; if (ix + k > maxx) maxx = ix + k; if (iy + k > maxy) maxy = iy + k;
-      }
+      const tau = t / Tc + NC * ((i * 0.6180339887) % 1), cy = Math.floor(tau), s = tau - cy, j = 7 + (cy % 4);
+      const si = (i + (live ? 7919 * Math.floor(cy / NC) : 0)) % NS;
+      let x = SC.sx[si] * Bm, y = SC.sy[si] * Bm, x1 = x, y1 = y;
+      for (let m = 0; m <= j; m++) { x1 = x; y1 = y; const nx = sn(a * y) + c * sn(a * x + 1.5707963); y = sn(b * x) + d * sn(b * y + 1.5707963); x = nx; }
+      // a particle lives at iterate j (x1, y1) and slides a little toward iterate j + 1 (x, y), trailing a short streak; its size grows and fades with sin(pi s) so it is born and dies unseen
+      const en = Math.sin(Math.PI * s); if (en < 0.2) continue;
+      const u = x1 - bx.cx, v = y1 - bx.cy, du = x - x1, dv = y - y1, L = Math.hypot(du, dv) || 1, ux = (rot ? -dv : du) / L, uy = (rot ? du : dv) / L;
+      const X = (rot ? -v : u) * sc + ox + ux * 0.012 * s, Y = (rot ? u : v) * sc + oy + uy * 0.012 * s, tl = 0.003 + 0.004 * en;
+      buf[en < 0.5 ? 0 : en < 0.8 ? 1 : 2].push(X - ux * tl, Y - uy * tl, X, Y);
+    }
+    for (let k = 0; k < 3; k++) { // the streak is a butt-capped stroke (cheap), the head a filled circle of the class radius
+      const B = buf[k], rr = rk * (0.55 + 0.3 * k);
+      ctx.globalAlpha = 0.45; ctx.lineWidth = 2 * rr * 0.8; ctx.lineCap = 'butt'; ctx.beginPath();
+      for (let i = 0; i < B.length; i += 4) { ctx.moveTo(B[i], B[i + 1]); ctx.lineTo(B[i + 2], B[i + 3]); }
+      ctx.stroke(); ctx.globalAlpha = 0.75; ctx.beginPath();
+      for (let i = 0; i < B.length; i += 4) { ctx.moveTo(B[i + 2] + rr, B[i + 3]); ctx.arc(B[i + 2], B[i + 3], rr, 0, TAU); }
+      ctx.fill();
     }
   }
-  if (pts || !nh) return;
-  // resolve counts to ink: alpha = 1 - (1 - a1)^hits, colour from the share of each attractor, then blit the dirty box
-  const ink = hex(g.c.ink), cool = hex(g.c.cool), lutA = new Uint8Array(64), lutB = new Uint8Array(64);
-  for (let i = 1; i < 64; i++) { lutA[i] = 255 * (1 - Math.pow(1 - ALPHA[0], i)); lutB[i] = 255 * (1 - Math.pow(1 - ALPHA[1], i)); }
-  for (let i = 0; i < nh; i++) {
-    const o = hit[i], a = Math.min(63, cA[o]), b = Math.min(63, cB[o]), aa = lutA[a], ab = lutB[b], al = 255 - (255 - aa) * (255 - ab) / 255, t = ab > aa ? 1 : 0;
-    u32[o] = (al << 24) | (((ink[2] + (cool[2] - ink[2]) * t) | 0) << 16) | (((ink[1] + (cool[1] - ink[1]) * t) | 0) << 8) | ((ink[0] + (cool[0] - ink[0]) * t) | 0);
-  }
-  const dw = maxx - minx, dh = maxy - miny;
-  SC.ctx.putImageData(SC.img, 0, 0, minx, miny, dw, dh);
-  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.drawImage(SC.cv, minx, miny, dw, dh, minx, miny, dw, dh); ctx.restore();
-  for (let i = 0; i < nh; i++) { const o = hit[i]; cA[o] = cB[o] = 0; u32[o] = 0; }
 }
 
 const mountPiece = (el, o) => mount(el, { piece: { meta, draw }, ...o });
