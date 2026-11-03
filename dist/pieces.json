@@ -340,29 +340,6 @@
   "bytes": 29927
  },
  {
-  "id": "v09-trap",
-  "pencils": true,
-  "title": "Trap",
-  "nl": "Trap",
-  "T": 16,
-  "still": 0.3,
-  "start": 0.2,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "cell (a,b) = projection of cube (x,y,z) with a = x - z, b = y - z; flights step (0,-1), (-1,0), (0,1), (1,0); the cells close, the depths x+y+z (the paint order) do not",
-  "label": "A square ring of isometric cubes drawn as a pencil staircase in three tones: four flights, each rising into the next, so the stairs climb for ever; a repeating light, mid, dark, mid pattern and four small marks run round it one way for ever.",
-  "params": {
-   "n": 5,
-   "pitch": 0.0078
-  },
-  "file": "v09-trap.html",
-  "module": "v09-trap.mjs",
-  "bytes": 24483
- },
- {
   "id": "v10-driehoek",
   "pencils": true,
   "title": "Onmogelijke driehoek",
@@ -376,14 +353,12 @@
    "1:1"
   ],
   "math": "cells (0,0) -> (n,0) -> (n,n) -> (0,0) with (a,b) = (x - z, y - z): rows along x, y and z close in the picture, not in space; the paint order x + y + z has to break once",
-  "label": "The impossible triangle drawn as a pencil tiling of cubes in three tones; its hole holds a smaller turned copy of itself, and so on without end, while the picture zooms in for ever and a light sweep circles each level.",
+  "label": "The impossible triangle drawn as a pencil tiling of cubes in three tones; bands of light, mid and dark tone run round the loop one way for ever, cube by cube.",
   "params": {
-   "n": 7,
-   "s": 0.45,
-   "a": 0
+   "n": 7
   },
   "file": "v10-driehoek.html",
   "module": "v10-driehoek.mjs",
-  "bytes": 24574
+  "bytes": 23968
  }
 ]

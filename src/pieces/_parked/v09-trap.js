@@ -49,7 +49,7 @@ function construct(g, c, R, u) {
 }
 
 export function draw(ctx, { g }) {
-  const P = g.params, n = Math.max(2, P.n | 0), N = 4 * n, ph = g.voice(1) / TAU;
+  const P = g.params, n = Math.max(2, P.n | 0), N = 4 * n, ph = g.voice(1) / TAU + (g.live ? 0.05 * Math.sin(g.drift * 0.21) : 0); // live: the speed wanders, never reverses
   // the ring of cells (a,b): flights step (0,-1), (-1,0), (0,1), (1,0); screen = a ex + b ey
   const cell = []; let a = 0, b = 0;
   for (const [da, db] of [[0, -1], [-1, 0], [0, 1], [1, 0]]) for (let k = 0; k < n; k++) { cell.push([a, b]); a += da; b += db; }
@@ -59,7 +59,7 @@ export function draw(ctx, { g }) {
   const u = Math.min(g.bx / (hw * 1.1), g.by / (hh * 1.1)) * 0.97, R = Math.hypot(hw, hh) * u * 0.93;
   const nH = [0, 1, 2].map(t => Math.max(2, Math.round(C30 * u / (P.pitch * [1.8, 1.25, 1][t]))));
   // tones in a repeating pattern light, mid, dark, mid that runs round the ring: two periods per loop (live: a slightly different speed)
-  const q = g.voice(2) / TAU, L = pts.map((p, i) => ({ x: p[0] - cx, y: p[1] - cy, w: 0.5 + 0.5 * Math.cos(TAU * (i / 4 - q)) }));
+  const q = g.voice(2) / TAU, L = pts.map((p, i) => ({ x: p[0] - cx, y: p[1] - cy, w: 1.5 * (0.5 + 0.5 * Math.cos(TAU * (i / 4 - q))) }));
   ctx.save(); ctx.rotate(-Math.PI / 3 * ph); construct(g, ctx, R, u); ctx.restore(); // the hexagon turns one sixth per loop, which closes
   cubes(g, ctx, L, u, nH);
   // four marks walk up the flights, one gap per loop, hopping from step to step

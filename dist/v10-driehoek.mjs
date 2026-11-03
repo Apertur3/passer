@@ -241,13 +241,13 @@ async function exportFrames(piece, o = {}, fps = 30) { // needs a user gesture f
 function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e4); }
 
 // V10 Driehoek (the impossible triangle of Reutersvard and Penrose, built from unit cubes).
-// One rule: three rows of n cubes, one along each axis, drawn back to front along the path; the last cube cannot be both in front of the first and behind it, so the triangle closes where it cannot. Its hole holds a smaller copy, turned and scaled, and so on without end; the picture zooms in for ever.
+// One rule: three rows of n cubes, one along each axis, drawn back to front along the path; the last cube cannot be both in front of the first and behind it, so the triangle closes where it cannot.
 const meta = {
   id: 'v10-driehoek', pencils: true, title: 'Onmogelijke driehoek', nl: 'Onmogelijke driehoek', T: 16, still: 0.2, start: 0.1, aspects: ['4:5', '16:9', '1:1'],
   math: 'cells (0,0) -> (n,0) -> (n,n) -> (0,0) with (a,b) = (x - z, y - z): rows along x, y and z close in the picture, not in space; the paint order x + y + z has to break once',
-  label: 'The impossible triangle drawn as a pencil tiling of cubes in three tones; its hole holds a smaller turned copy of itself, and so on without end, while the picture zooms in for ever and a light sweep circles each level.',
-  // n: cubes per side; s: scale of each nested copy; a: its turn in degrees
-  params: { n: 7, s: 0.45, a: 0 },
+  label: 'The impossible triangle drawn as a pencil tiling of cubes in three tones; bands of light, mid and dark tone run round the loop one way for ever, cube by cube.',
+  // n: cubes per side
+  params: { n: 7 },
 };
 
 const TAU = 2 * Math.PI, C30 = Math.sqrt(3) / 2, HEX = [[0, -1], [C30, -0.5], [C30, 0.5], [0, 1], [-C30, 0.5], [-C30, -0.5]];
@@ -294,23 +294,16 @@ function construct(g, c, R, u) {
 const path = (n, i) => i < n ? [i, 0] : i < 2 * n ? [n, i - n] : [n - (i - 2 * n), n - (i - 2 * n)];
 
 function draw(ctx, { g }) {
-  const P = g.params, n = Math.max(3, P.n | 0), N = 3 * n, S0 = P.s, AL = P.a * Math.PI / 180, pu = g.voice(1) / TAU, fl = Math.floor(pu), zp = pu - fl, sm = g.ease.smoother;
+  const n = Math.max(3, g.params.n | 0), N = 3 * n, ph = g.voice(1) / TAU + (g.live ? 0.05 * Math.sin(g.drift * 0.21) : 0); // live: the speed wanders, never reverses
   const pts = []; for (let i = 0; i < N; i++) { const p = path(n, i); pts.push([(p[0] - p[1]) * C30, (p[0] + p[1]) / 2]); }
-  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), gx = n * C30 / 3, gy = n / 2; // the centroid: every nested copy turns and shrinks about it
-  const hw = Math.max(...xs.map(x => Math.abs(x - gx))) + C30, hh = Math.max(...ys.map(y => Math.abs(y - gy))) + 1;
-  const u0 = Math.min(g.bx / (hw * 1.0), g.by / (hh * 1.0)) * 0.96, R = Math.hypot(hw, hh) * u0 * 0.93;
-  const nH = [4, 6, 8];
-  ctx.save(); ctx.rotate(-Math.PI / 3 * pu); construct(g, ctx, R, u0); ctx.restore(); // the hexagon turns one sixth of a turn per loop, which closes
-  for (let j = 5; j >= -1; j--) { // outermost level first; level j sits at scale s^(j - zp), so a loop carries each level onto the place of the next one out
-    const w = j - zp, sg = Math.pow(S0, w), uu = u0 * sg;
-    const fo = 1 - sm((sg - 1.1) / 0.9), fi = sm((uu * C30 * g.S / nH[2] - 2.2) / 2), fe = sm((uu * g.S - 2) / 5); // fade out as it leaves the frame, and as the hatch pitch drops under about 3 px
-    if (fo < 0.01 || fi * fe < 0.01) continue;
-    const L = pts.map((p, i) => {
-      const bump = o => { const d = (((i / N - o) % 1) + 1.5) % 1 - 0.5; return Math.exp(-d * d * 40); };
-      return { x: p[0] - gx, y: p[1] - gy, w: Math.max(bump(pu + w * 0.25), 0.7 * bump(g.voice(2) / TAU / 2 + 0.5 + w * 0.25)) };
-    });
-    ctx.save(); ctx.rotate(AL * w); cubes(g, ctx, L, uu, nH, fo * fi, fo * fe, g.live ? 64 * (j + fl) : 0); ctx.restore();
-  }
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const hw = (Math.max(...xs) - Math.min(...xs)) / 2 + C30, hh = (Math.max(...ys) - Math.min(...ys)) / 2 + 1;
+  const u = Math.min(g.bx / (hw * 1.08), g.by / (hh * 1.08)) * 0.97, R = Math.hypot(hw, hh) * u * 0.93, nH = [0, 1, 2].map(t => Math.max(2, Math.round(C30 * u / (0.0078 * [1.8, 1.25, 1][t]))));
+  // three bands of tone (light, mid, dark, mid) run round the loop, one band-length per loop: one direction, cell by cell
+  const L = pts.map((p, i) => ({ x: p[0] - cx, y: p[1] - cy, w: 1.5 * (0.5 + 0.5 * Math.cos(TAU * (3 * i / N - ph))) }));
+  ctx.save(); ctx.rotate(-Math.PI / 3 * ph); construct(g, ctx, R, u); ctx.restore(); // the hexagon turns one sixth per loop, which closes
+  ctx.save(); if (g.live) ctx.rotate(g.drift * 0.012); // live only: the figure turns very slowly, one way (a loop export stays upright so that it closes)
+  cubes(g, ctx, L, u, nH, 1, 1, 0); ctx.restore();
 }
 
 const mountPiece = (el, o) => mount(el, { piece: { meta, draw }, ...o });
