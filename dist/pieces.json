@@ -2,26 +2,265 @@
  {
   "id": "f01-schotter",
   "title": "Schotter drift",
-  "T": 30,
-  "still": 0.35,
+  "T": 16,
+  "still": 0.56,
+  "start": 0.25,
   "aspects": [
    "4:5",
    "16:9",
    "1:1"
   ],
-  "label": "A grid of squares, perfectly ordered at the top, tilting and drifting further apart row by row toward the bottom.",
+  "label": "A lattice of squares where order and disorder trade places in drifting patches, some squares opening into nested ones, while slow rings of order cross the sheet.",
   "params": {
-   "rows": 24,
-   "cols": 16,
-   "rowsWide": 15,
-   "decay": 1.5,
-   "maxAngle": 0.5,
-   "maxShift": 0.5,
-   "sway": 0.05,
+   "cells": 430,
+   "maxAngle": 0.18,
+   "maxShift": 0.55,
+   "orbit": 0.35,
+   "swell": 0.018,
    "gap": 0.14
   },
   "file": "f01-schotter.html",
   "module": "f01-schotter.mjs",
-  "bytes": 16123
+  "bytes": 23819
+ },
+ {
+  "id": "f02-ruled-disorder",
+  "title": "Ruled disorder",
+  "T": 12,
+  "still": 0.3,
+  "start": 0.27,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "Bands of short strokes slide past one another, each band drifting between one strict direction and a mix of verticals and diagonals, while a travelling gap parts the strokes around a moving point.",
+  "params": {
+   "rows": 27,
+   "rowsWide": 15,
+   "bands": 5,
+   "decay": 0.32,
+   "len": 0.92,
+   "travel": 0.7,
+   "gap": 0.1,
+   "bold": 0.07
+  },
+  "file": "f02-ruled-disorder.html",
+  "module": "f02-ruled-disorder.mjs",
+  "bytes": 23376
+ },
+ {
+  "id": "f03-trames",
+  "title": "Trames moire",
+  "T": 12,
+  "still": 0.3,
+  "start": 0.27,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "Two sets of fine concentric rings with slightly shifted centres overprint inside a disc; the interference pattern sweeps across as the two centres circle in opposite directions.",
+  "params": {
+   "pitch": 0.0078,
+   "offset": 0.1,
+   "skip": 0.1,
+   "ratio": 1,
+   "radius": 0.43
+  },
+  "file": "f03-trames.html",
+  "module": "f03-trames.mjs",
+  "bytes": 21206
+ },
+ {
+  "id": "f04-tesseract",
+  "title": "Tesseract",
+  "T": 16,
+  "still": 0.5,
+  "start": 0.25,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "A hypercube turning in four dimensions, projected to a fan of fine lines where only a seeded subset of its edges is drawn.",
+  "params": {
+   "keep": 0.72,
+   "copies": 12,
+   "spread": 0.05,
+   "depth": 6
+  },
+  "file": "f04-tesseract.html",
+  "module": "f04-tesseract.mjs",
+  "bytes": 21524
+ },
+ {
+  "id": "f05-hairline-flow",
+  "title": "Hairline flow",
+  "T": 12,
+  "dprMax": 1,
+  "still": 0.3,
+  "start": 0.25,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "Thousands of fine hairlines combed along a slowly drifting flow field that bends around an empty disc.",
+  "params": {
+   "lines": 2100,
+   "len": 0.075,
+   "scale": 2.4,
+   "void": 0.17,
+   "hug": 0.16,
+   "drift": 0.55,
+   "wave": 1.1,
+   "orbit": 0.14
+  },
+  "file": "f05-hairline-flow.html",
+  "module": "f05-hairline-flow.mjs",
+  "bytes": 25136
+ },
+ {
+  "id": "f06-ribbon-sheaf",
+  "title": "Ribbon sheaf",
+  "T": 12,
+  "still": 0.5,
+  "start": 0.25,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "One looping curve copied a few hundred times, each copy turned slightly further, so the hairlines build a folded translucent ribbon.",
+  "params": {
+   "copies": 240,
+   "sweep": 1.3,
+   "twist": 1.3,
+   "alpha": 0.14,
+   "seg": 220
+  },
+  "file": "f06-ribbon-sheaf.html",
+  "module": "f06-ribbon-sheaf.mjs",
+  "bytes": 22142
+ },
+ {
+  "id": "f08-iso-bands",
+  "title": "Iso-bands",
+  "T": 16,
+  "still": 0.3,
+  "start": 0.25,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "Evenly spaced contour lines of a slowly drifting warped field, splitting and merging like the bands of a topographic map.",
+  "params": {
+   "bands": 25,
+   "warp": 0.22,
+   "scale": 1.4,
+   "drift": 0.25,
+   "orbit": 0.05,
+   "cell": 0.0075
+  },
+  "file": "f08-iso-bands.html",
+  "module": "f08-iso-bands.mjs",
+  "bytes": 24306
+ },
+ {
+  "id": "f09-glyph-tiling",
+  "title": "Glyph tiling",
+  "T": 12,
+  "still": 0.3,
+  "start": 0.27,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "A sheet of square tiles each holding quarter-curve ribbons of hairlines that meet across the edges, sliding slowly; different rules set the tile directions in different regions, the curves straighten into diamonds around a wandering point, and slow fronts half-turn some tiles.",
+  "params": {
+   "tile": 0.052,
+   "flip": 0.15,
+   "scale": 3.2,
+   "angle": 0.55,
+   "turn": 0.28,
+   "travel": 0.6,
+   "mark": 0.14
+  },
+  "file": "f09-glyph-tiling.html",
+  "module": "f09-glyph-tiling.mjs",
+  "bytes": 23513
+ },
+ {
+  "id": "f10-pegs-string",
+  "title": "Pegs and string",
+  "T": 12,
+  "start": 0.3,
+  "still": 0.5,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "A single thin string wound around a lattice of pegs, drawn as straight tangents and small wraps, that keeps circling loose around its pegs in a wave from left to right.",
+  "params": {
+   "across": 13,
+   "cover": 0.9,
+   "reach": 7,
+   "wrap": 0.0038,
+   "hooks": 0
+  },
+  "file": "f10-pegs-string.html",
+  "module": "f10-pegs-string.mjs",
+  "bytes": 24080
+ },
+ {
+  "id": "f12-metamorphosis",
+  "title": "Metamorphosis",
+  "T": 12,
+  "still": 0.3,
+  "start": 0.27,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "A sheet of hatched and empty tiles that interlock without gaps and drift sideways; their edge curves change from one shape family to another as they cross the page.",
+  "params": {
+   "cols": 8,
+   "periods": 1,
+   "periodsWide": 2,
+   "hatch": 0.0072,
+   "drift": 8,
+   "tilt": 0.6,
+   "swing": 0.7
+  },
+  "file": "f12-metamorphosis.html",
+  "module": "f12-metamorphosis.mjs",
+  "bytes": 23480
+ },
+ {
+  "id": "m01-harmonograph",
+  "title": "Harmonograph",
+  "T": 16,
+  "still": 0.5,
+  "start": 0.3,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "x(t) = Σ A_i sin(f_i t + φ_i) e^(-d_i t), y(t) likewise; f_i near integer ratios, e.g. 3 : 2 + 0.02",
+  "label": "A pen traced by damped pendulums: near-integer frequency ratios make a decaying spiral whose ink gathers where the path retraces.",
+  "params": {
+   "cycles": 60,
+   "segs": 8000,
+   "alpha": 0.42
+  },
+  "file": "m01-harmonograph.html",
+  "module": "m01-harmonograph.mjs",
+  "bytes": 21536
  }
 ]

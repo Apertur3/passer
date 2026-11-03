@@ -36,6 +36,18 @@ for (const meta of pieces) {
     R(f0, { theme, t: 0 }); R(fT, { theme, t: T }); R(fe, { theme, t: T - 1 / 30 });
     const d0 = px(f0), dE = px(fe); let diff = 0; for (let i = 0; i < d0.length; i += 4) if (d0[i] !== dE[i]) diff++;
     add(id, theme, '2 seamless', same(d0, px(fT)), `frame(0)==frame(T); frame(T-1/30) differs in ${(100 * diff / (d0.length / 4)).toFixed(2)}% of pixels`);
+    // 12 not blank: share of pixels differing from a paper-only render by > 6/255 luminance, at 4 times, must be 0.5%..40%
+    const blank = { meta: M.meta, draw() {} }, shares = [];
+    for (const f of [M.meta.still, 0.25, 0.5, 0.75]) {
+      const a = mk(400, 500), b = mk(400, 500); R(a, { theme, t: f * T }); M.render(blank, b.getContext('2d'), { seed: 'a', t: f * T, w: 400, h: 500, theme });
+      const x = px(a), y = px(b); let n = 0; for (let i = 0; i < x.length; i += 4) if (Math.abs(x[i] + x[i + 1] + x[i + 2] - y[i] - y[i + 1] - y[i + 2]) / 3 > 6) n++;
+      shares.push(100 * n / (x.length / 4));
+    }
+    add(id, theme, '12 not blank', shares.every(v => v >= 0.5 && v <= 40), 'ink share at still/.25/.5/.75: ' + shares.map(v => v.toFixed(1) + '%').join(', '));
+    // 11 live evolution: in live mode, t and t+T must differ clearly (loop mode: identical, see check 2)
+    const l1 = mk(400, 500), l2 = mk(400, 500); R(l1, { theme, t: 30, live: true }); R(l2, { theme, t: 30 + T, live: true });
+    const e1 = px(l1), e2 = px(l2); let ld = 0; for (let i = 0; i < e1.length; i += 4) if (Math.abs(e1[i] - e2[i]) > 40) ld++;
+    add(id, theme, '11 live evolution', ld / (e1.length / 4) > 0.005, `live frames T apart differ in ${(100 * ld / (e1.length / 4)).toFixed(2)}% of pixels (>0.5% needed)`);
     // 5 perf: 700 CSS px wide at DPR 2, 4:5
     const pc = mk(1400, 1750); let dt = 0; const timed = { meta: M.meta, draw: (...x) => { const s = performance.now(); M.draw(...x); dt += performance.now() - s; } };
     const drawMs = [], totMs = [];

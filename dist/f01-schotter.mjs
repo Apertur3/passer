@@ -66,22 +66,24 @@ const cl = u => Math.min(1, Math.max(0, u));
 const ease = {
   sine: u => 0.5 - 0.5 * Math.cos(Math.PI * cl(u)),
   smoother: u => { u = cl(u); return u * u * u * (u * (u * 6 - 15) + 10); },
-  // phase warp with rests: two eased strokes per loop, each pausing at both ends (about 35% of the loop is slow)
-  rest: p => { const q = p * 2, k = Math.floor(q); return (k + ease.smoother((q - k - 0.1) / 0.8)) / 2; },
-  // breathing amplitude 0..1 over one loop, resting at both extremes
+  // tempo curve, no rests: a phase that runs between 0.5x and 1.5x of the average speed and never stops
+  rest: p => p + Math.sin(2 * Math.PI * p) / (4 * Math.PI),
+  // breathing amplitude 0..1 over one loop (cosine of the tempo-varied phase)
   breath: p => 0.5 - 0.5 * Math.cos(2 * Math.PI * ease.rest(p)),
 };
 
 // ---- frame: unit transform, paper, line weights ---------------------------
 const LW = { hair: 0.0006, fine: 0.0012, line: 0.0025, bold: 0.006, mass: 0.02 };
-function frame(ctx, { w, h, seed = 1, theme: tn = 'mono' }) {
+function frame(ctx, { w, h, seed = 1, theme: tn = 'mono', q = 1 }) {
   const S = Math.min(w, h), aspect = Math.max(w, h) / S, c = theme(tn), m = aspect > 1.5 ? 0.06 : 0.08;
   const hw = w / S / 2, hh = h / S / 2;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = c.paper; ctx.fillRect(0, 0, w, h);
   ctx.setTransform(S, 0, 0, S, w / 2, h / 2); ctx.lineCap = ctx.lineJoin = 'round';
   const lw = n => Math.max(LW[n], 0.75 / S);
-  return { S, aspect, w, h, hw, hh, m, bx: hw - m, by: hh - m, c, seed, lw,
+  // g.q: quality factor in (0, 1]. 1 in tests, exports and ?t= frames; mount's governor lowers it on slow devices.
+  // Heavy pieces multiply their element counts (segments, particles, dots) by g.q, rounding up to at least a sensible minimum.
+  return { S, aspect, w, h, hw, hh, m, bx: hw - m, by: hh - m, c, seed, lw, q,
     // pen: set stroke width (floored at 0.75 device px, alpha scaled to keep tone), alpha and colour
     pen(ctx, n, a = 1, col = c.ink) { ctx.lineWidth = lw(n); ctx.globalAlpha = a * Math.min(1, LW[n] / lw(n)); ctx.strokeStyle = col; },
     rng: salt => prng(seed + ':' + (salt || '')), noise4, ease };
@@ -116,25 +118,35 @@ function paper(g) {
 
 // ---- render: the one place that turns (piece, seed, t, size, theme) into pixels ---
 function render(piece, ctx, o) {
-  const g = frame(ctx, o), T = piece.meta.T;
+  const g = setup(piece, ctx, o);
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(paper(g), 0, 0); ctx.restore();
-  g.params = { ...piece.meta.params, ...o.params };
-  g.T = T; g.p = (((o.t / T) % 1) + 1) % 1; g.theta = 2 * Math.PI * g.p;
-  g.thetaR = 2 * Math.PI * ease.rest(g.p); // theta with rests: use it for motion that should pause
-  g.loop = (x, y, r, th = g.theta) => loopNoise(x, y, th, r);
   piece.draw(ctx, { seed: o.seed, t: o.t, w: o.w, h: o.h, g });
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
 }
+// setup: the frame helper plus phase, noise and live-mode helpers (also used headless by scripts/motion.mjs)
+function setup(piece, ctx, o) {
+  const g = frame(ctx, o), T = piece.meta.T;
+  g.params = { ...piece.meta.params, ...o.params };
+  g.T = T; g.p = (((o.t / T) % 1) + 1) % 1; g.theta = 2 * Math.PI * g.p;
+  g.thetaR = 2 * Math.PI * ease.rest(g.p); // theta with varying tempo (0.5x..1.5x), never stops
+  // Live mode (mount default; exports, ?t= frames, tests and ?loop=1 stay in loop mode, where drift = 0 and everything closes at T):
+  //  g.live   true in live mode.
+  //  g.drift  unbounded slow time in seconds (page clock); 0 in loop mode. Use it for slow envelopes that should never recur.
+  //  g.voice(k) loop mode: k * theta (integer k >= 1, closes). Live: 2*pi*(t/T)*(k + eps_k) unwrapped, with small detunes so
+  //           voices slip against each other and the combination never repeats.
+  //  g.loop(x, y, r, th) loop noise; live: the sampling circle's centre wanders slowly through noise space, so fields never recur.
+  g.live = !!o.live; g.drift = g.live ? o.t : 0;
+  const EPS = [0, 0.0618, 0.1414, 0.0732, 0.0236, 0.1032, 0.0455, 0.0871];
+  g.voice = k => g.live ? 2 * Math.PI * (o.t / T) * (k + (EPS[k - 1] ?? ((k * 0.618034) % 1) * 0.1)) : k * g.theta;
+  const D = [0.37, 0.61, 0.43, 0.29].map(v => v * 0.03 * g.drift);
+  g.loop = (x, y, r, th = g.theta) => g.live ? noise4(x + D[0], y + D[1], r * Math.cos(th) + D[2], r * Math.sin(th) + D[3]) : loopNoise(x, y, th, r);
+  return g;
+}
 
-// ---- clock: rAF loop with pause and resume, drops to 30 fps when slow ------
+// ---- clock: rAF loop with pause and resume ------
 function clock(fn) {
-  let raf = 0, slow = 0, flip = 0, ema = 0;
-  const loop = () => {
-    raf = requestAnimationFrame(loop);
-    if (slow && (flip ^= 1)) return;
-    const t0 = performance.now(); fn(t0 / 1000);
-    ema = ema * 0.9 + (performance.now() - t0) * 0.1; slow = ema > 10 ? 1 : 0;
-  };
+  let raf = 0;
+  const loop = ts => { raf = requestAnimationFrame(loop); fn(ts / 1000); };
   return { start() { if (!raf) raf = requestAnimationFrame(loop); }, stop() { cancelAnimationFrame(raf); raf = 0; }, get running() { return !!raf; } };
 }
 
@@ -146,24 +158,52 @@ function mount(el, o) {
   cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', m.label);
   cv.style.cssText = `display:block;border:0;background:${theme(tn).paper};` + (o.fit ? '' : `width:100%;aspect-ratio:${aw}/${ah}`);
   el.appendChild(cv);
-  const inst = { canvas: cv, frames: 0, destroy };
+  const inst = { canvas: cv, frames: 0, q: 1, qSteps: 0, drawMs: [], destroy }; // drawMs: cost of the last 600 live paints (draw+frame, CPU side)
   const mql = matchMedia('(prefers-reduced-motion: reduce)'), reduced = () => (o.reduce ?? mql.matches);
-  let vis = true, lastT = 0, sized = false, key = '';
-  const paint = (t, again) => { // static modes skip a repaint of an identical frame
-    const k = cv.width + 'x' + cv.height + ':' + t; if (!sized || (!again && k === key)) return; key = k; lastT = t; render(piece, ctx, { seed, t, w: cv.width, h: cv.height, theme: tn, params: o.params }); inst.frames++; };
-  const clk = clock(t => paint(t, 1));
+  let vis = true, lastT = 0, lastLive = false, sized = false, key = '';
+  const paint = (t, again, live) => { // static modes skip a repaint of an identical frame
+    const k = cv.width + 'x' + cv.height + ':' + t; if (!sized || (!again && k === key)) return; key = k; lastT = t; lastLive = live; render(piece, ctx, { seed, t, w: cv.width, h: cv.height, theme: tn, params: o.params, q: gov.q, live }); inst.frames++; };
+  // Quality governor (live clock only; never for exports or ?t= frames). Rolling mean over 30 frames of (a) the cost of
+  // draw+frame and (b) the rAF interval. Mean cost > 12 ms or interval > 22 ms: step g.q down one level of [1, .7, .5, .35].
+  // Mean cost < 6 ms and interval < 18 ms for 3 consecutive windows (90 frames): step back up one level.
+  const gov = { q: o.q ?? 1, target: o.q ?? 1, L: [1, 0.7, 0.5, 0.35], i: 0, n: 0, cost: 0, gap: 0, bad: 0, good: 0, last: 0, stepAt: 0 };
+  // Live clock ACCUMULATES: tAcc += clamp(dt, 0, 0.05) * speed, with dt from rAF timestamps and speed = inst.speed * meta.speed.
+  // Changing the speed never changes the phase (no jump), and a stall or a pause becomes a slight slowdown, never a visual jump.
+  // The live t (= tAcc, unbounded) starts at meta.start * T and feeds g.drift / g.voice.
+  inst.speed = o.speed ?? 1; let tAcc = (m.start ?? 0.25) * m.T, lastTs = 0;
+  // Quality governor (live clock only; never for exports or ?t= frames). Windows of 30 frames of (a) the cost of draw+frame and
+  // (b) the rAF interval. Down one level of [1, .7, .5, .35] after 2 consecutive overloaded windows, about 1 s (cost > 10 ms or interval > 22 ms);
+  // up after 3 consecutive good windows (cost < 5 ms and interval < 18 ms) and at least 5 s since the last step. g.q itself eases toward the
+  // target level (about 1 s), so element counts fade rather than pop.
+  const govern = (cost, now) => {
+    const gap = gov.last && now - gov.last < 100 ? now - gov.last : 0; gov.last = now;
+    gov.cost += cost; gov.gap += gap || 16;
+    if (o.q == null) gov.q += (gov.target - gov.q) * 0.06;
+    inst.q = gov.q;
+    if (++gov.n < 30) return;
+    const c = gov.cost / 30, d = gov.gap / 30; gov.n = gov.cost = gov.gap = 0;
+    const bad = c > 10 || d > 22, good = c < 5 && d < 18; gov.bad = bad ? gov.bad + 1 : 0; gov.good = good ? gov.good + 1 : 0;
+    if (gov.bad >= 2 && gov.i < 3 && now - gov.stepAt > 1500) { gov.i++; inst.qSteps++; gov.stepAt = now; gov.bad = 0; } else if (gov.good >= 3 && gov.i > 0 && now - gov.stepAt > 5000) { gov.i--; inst.qSteps++; gov.stepAt = now; gov.good = 0; }
+    gov.target = gov.L[gov.i];
+  };
+  const clk = clock(ts => {
+    const t0 = performance.now(); tAcc += Math.min(0.05, Math.max(0, lastTs ? ts - lastTs : 0)) * inst.speed * (m.speed ?? 1); lastTs = ts;
+    paint(tAcc, 1, !o.loop); const cost = performance.now() - t0; inst.drawMs.push(cost); if (inst.drawMs.length > 600) inst.drawMs.shift(); govern(cost, t0);
+  });
   function update() {
     if (o.t != null) { clk.stop(); paint(o.t); }
     else if (reduced()) { clk.stop(); paint(m.still * m.T); }
-    else if (vis && !document.hidden) clk.start(); else clk.stop();
+    else if (vis && !document.hidden) { if (!clk.running) lastTs = 0; clk.start(); } else clk.stop();
     cv.dataset.state = clk.running ? 'running' : 'paused';
   }
   const ro = new ResizeObserver(([e]) => {
     const { width, height } = e.contentRect; if (!width) return;
     const cw = o.fit ? Math.min(width, height * ar) : width, ch = cw / ar;
     if (o.fit) { cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; }
-    let k = Math.min(devicePixelRatio || 1, 2), pw = cw * k; if (pw * (pw / ar) > 2.5e6) pw = Math.sqrt(2.5e6 * ar);
-    cv.width = Math.round(pw); cv.height = Math.round(pw / ar); sized = true; update(); paint(lastT);
+    const liveMode = o.t == null && !reduced() && !o.loop, k = Math.min(devicePixelRatio || 1, liveMode ? (o.dprMax ?? m.dprMax ?? 2) : 2); // meta.dprMax: heavy pieces ask for DPR 1 in live mode
+    let pw = cw * k; if (pw * (pw / ar) > 2.5e6) pw = Math.sqrt(2.5e6 * ar);
+    const nw = Math.round(pw), nh = Math.round(pw / ar); if (cv.width === nw && cv.height === nh && sized) return; // no needless clear
+    cv.width = nw; cv.height = nh; sized = true; update(); if (lastT || !clk.running) paint(lastT, 0, lastLive); // repaint in the same task: no blank frame is ever composited
   });
   const io = new IntersectionObserver(es => { vis = es[es.length - 1].isIntersecting; update(); });
   const onVis = () => update();
@@ -200,40 +240,71 @@ async function exportFrames(piece, o = {}, fps = 30) { // needs a user gesture f
 }
 function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e4); }
 
-// F01 Schotter drift (after Georg Nees, c. 1968).
-// One rule: a grid of squares that is perfectly ordered at the top and loses its order row by row.
+// F01 Schotter drift (after Georg Nees, c. 1968, with Vera Molnar's nested squares).
+// One rule: order and disorder trade places across a lattice of squares, in drifting patches, nested squares and slow rings of order.
 const meta = {
-  id: 'f01-schotter', title: 'Schotter drift', T: 30, still: 0.35, aspects: ['4:5', '16:9', '1:1'],
-  label: 'A grid of squares, perfectly ordered at the top, tilting and drifting further apart row by row toward the bottom.',
-  // rows, cols: grid size (16:9 uses rowsWide and fills the width with columns); decay: exponent of amp = (row/rows)^decay;
-  // maxAngle in radians, maxShift in cell pitches at full disorder; sway: extra slow rocking of the lower rows
-  params: { rows: 24, cols: 16, rowsWide: 15, decay: 1.5, maxAngle: 0.5, maxShift: 0.5, sway: 0.05, gap: 0.14 },
+  id: 'f01-schotter', title: 'Schotter drift', T: 16, still: 0.56, start: 0.25, aspects: ['4:5', '16:9', '1:1'],
+  label: 'A lattice of squares where order and disorder trade places in drifting patches, some squares opening into nested ones, while slow rings of order cross the sheet.',
+  // cells: approximate number of squares; maxAngle (rad) and maxShift (pitches) at full disorder; orbit: circulating offset of disordered squares (pitches);
+  // swell: amplitude (S) of the slow long-wave ripple that carries the whole lattice; gap: space between neighbours
+  params: { cells: 430, maxAngle: 0.18, maxShift: 0.55, orbit: 0.35, swell: 0.018, gap: 0.14 },
 };
 
+const TAU = 2 * Math.PI, WEIGHT = ['hair', 'fine', 'line', 'bold', 'hair', 'fine'], ALPHA = [0.95, 0.95, 1, 1, 0.9, 1];
+
+// a smooth field in about [-2, 2]: a few travelling plane waves; the voice numbers set how each one moves over a loop
+function field(r, cs) {
+  const w = cs.map(c => { const a = r() * TAU, k = 3.5 + 4 * r(); return { kx: k * Math.cos(a), ky: k * Math.sin(a), ph: r() * TAU, c: c * (r() < 0.5 ? -1 : 1) }; });
+  return (x, y, v, dr) => { let s = 0; for (const q of w) s += Math.sin(q.kx * x + q.ky * y + q.ph + (q.c > 0 ? v(q.c) : -v(-q.c)) + 0.16 * dr * (Math.abs(q.c) & 3)); return s / Math.sqrt(w.length / 2); };
+}
+
 function draw(ctx, { t, g }) {
-  const P = g.params, r = g.rng('cells');
-  const wide = g.aspect > 1.5, rows = wide ? P.rowsWide : P.rows, pitch = Math.min((2 * g.by) / (rows + 0.8), wide ? 9 : (2 * g.bx) / (P.cols + 0.8)); // +0.8: room for the drift
-  const cols = wide ? Math.floor((2 * g.bx) / pitch - 0.8) : P.cols;
-  const side = pitch * (1 - P.gap), x0 = -((cols - 1) * pitch) / 2, y0 = -((rows - 1) * pitch) / 2;
-  const breath = 0.3 + 0.7 * g.ease.breath(g.p); // overall disorder, 30%..100%, resting at both ends
-  // the one deliberate deviation: a square low in the grid that keeps its order
-  const ai = 1 + Math.floor(r() * (cols - 2)), aj = Math.floor(rows * 0.7);
-  for (let j = 0; j < rows; j++) {
-    const row = Math.pow(j / (rows - 1), P.decay);
-    for (let i = 0; i < cols; i++) {
-      const rx = r() * 2 - 1, ry = r() * 2 - 1, rr = r() * 2 - 1, al = 0.88 + 0.12 * r(), wj = 1 + 0.2 * (r() - 0.5);
-      if (i === ai && j === aj) continue;
-      const A = row * breath, sw = P.sway * row * g.loop(i * 0.35, j * 0.35, 0.5, g.thetaR);
-      ctx.save();
-      ctx.translate(x0 + i * pitch + rx * P.maxShift * pitch * A, y0 + j * pitch + ry * P.maxShift * pitch * A);
-      ctx.rotate(rr * P.maxAngle * A + sw);
-      g.pen(ctx, 'fine', al, g.c.ink); ctx.lineWidth *= wj;
-      ctx.strokeRect(-side / 2, -side / 2, side, side);
-      ctx.restore();
-    }
+  const P = g.params, r = g.rng('cells'), T = meta.T, sm = g.ease.smoother, v = g.voice;
+  const area = 4 * g.bx * g.by, pitch = Math.sqrt(area / P.cells), cols = Math.max(4, Math.round((2 * g.bx) / pitch)), rows = Math.max(4, Math.round((2 * g.by) / pitch));
+  const px = (2 * g.bx) / cols, py = (2 * g.by) / rows, pt = Math.min(px, py), x0 = -g.bx + px / 2, y0 = -g.by + py / 2;
+  const dr = g.drift, fA = field(g.rng('fa'), [1, 1, 1, 2]), fS = field(g.rng('fs'), [2, 3, 1]), fD = field(g.rng('fd'), [1, 2, 1]);
+  const sw = g.rng('swell'), swa = [sw() * TAU, sw() * TAU];
+
+  // ---- ripples: slow rings of order, one every half loop; loop mode wraps the slot index so frame(T) = frame(0)
+  const Pe = T / 2, DUR = 6, tc = g.live ? dr : g.p * T, n0 = Math.floor(tc / Pe), rings = [];
+  for (const n of [n0, n0 - 1]) {
+    const q = g.rng('ev' + (g.live ? n : ((n % 2) + 2) % 2)), s0 = q() * 2, cx = (q() * 2 - 1) * g.bx * 0.8, cy = (q() * 2 - 1) * g.by * 0.8, amp = 0.7 + 0.3 * q(), tau = tc - n * Pe - s0;
+    if (tau > 0 && tau < DUR) rings.push({ cx, cy, R: 0.04 + 0.07 * tau, a: amp * g.ease.sine(Math.sin(Math.PI * tau / DUR)) });
   }
-  g.pen(ctx, 'line', 1, g.c.accent);
-  ctx.strokeRect(x0 + ai * pitch - side / 2, y0 + aj * pitch - side / 2, side, side);
+
+  // ---- global fields, evaluated per cell below
+  const psi = 1.57 + 0.8 * Math.sin(v(1) + 1), bias = [Math.cos(psi), Math.sin(psi)], thr = 0.2 * Math.sin(v(2) + 0.5);
+  const swell = P.swell * (0.85 + 0.15 * Math.sin(v(2) + 2)), k1 = 6.5, k2 = 5.2;
+  const paths = [0, 1, 2, 3, 4, 5].map(() => new Path2D()), junk = new Path2D();
+  const sq = (path, cx, cy, h, a) => { // closed square, corners in a fixed order
+    const c = Math.cos(a) * h, s = Math.sin(a) * h;
+    path.moveTo(cx - c + s, cy - s - c); path.lineTo(cx + c + s, cy + s - c); path.lineTo(cx + c - s, cy + s + c); path.lineTo(cx - c - s, cy - s + c); path.closePath();
+  };
+  const side = pt * (1 - P.gap) / 2;
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const rr = 0.85 * (r() * 2 - 1), rs = r() * 2 - 1, rt = r() * 2 - 1, rk = r(), ph = r() * TAU, kw = 2 + Math.floor(r() * 3), rc = r(), warm = r();
+    const cls = rc < 0.58 ? 0 : rc < 0.86 ? 1 : rc < 0.95 ? 4 : rc < 0.99 ? 2 : 3; // weight class, fixed per cell
+    const bx = x0 + i * px, by = y0 + j * py;
+    // swell: two slow long waves carry the lattice, so even ordered patches keep moving
+    const w1 = Math.sin(k1 * (0.8 * bx + 0.6 * by) - v(5) + swa[0] + 0.12 * dr), w2 = Math.sin(k2 * (-0.5 * bx + 0.87 * by) + v(6) + swa[1]);
+    let X = bx + swell * (0.9 * w1 + 0.4 * w2), Y = by + swell * (0.4 * w1 - 0.9 * w2);
+    // order front: A is 1 where the lattice has dissolved, 0 where it is crystal
+    const F = fA(bx, by, v, dr) + bias[0] * bx + bias[1] * by;
+    let A = sm((F - thr + 1.2) / 2.4);
+    let pulse = 0;
+    for (const e of rings) { const d = Math.hypot(bx - e.cx, by - e.cy), b = e.a * (1 - sm(Math.abs(d - e.R) / 0.26)); A *= 1 - 0.85 * b; pulse += b; const m = b * pt * 0.3 / (d + 0.02); X += (bx - e.cx) * m; Y += (by - e.cy) * m; }
+    const o = P.orbit * pt * A * (0.6 + 0.4 * rk), vv = v(kw) + ph;
+    X += A * P.maxShift * pt * rs + o * Math.cos(vv); Y += A * P.maxShift * pt * rt + o * Math.sin(vv);
+    const a = A * (rr * P.maxAngle + 0.035 * Math.sin(vv + 1));
+    // size field: drifting density; the smallest squares vanish, leaving paper
+    const Fs = fS(bx, by, v, dr), size = side * (0.55 + 0.45 * sm((Fs + 1.2) / 2.1)) * sm((Fs + 1.7) / 0.6) * (1 + 0.3 * Math.min(1, pulse));
+    // nested squares: where the depth field is high the square opens into concentric ones (Molnar)
+    const dep = sm((fD(bx, by, v, dr) - 0.1) / 1.5), on = size > 0.0025;
+    const put = path => { sq(on ? path : junk, X, Y, size, a); for (let n = 1; n <= 2; n++) sq(on && dep > 0.04 ? path : junk, X, Y, size * (1 - 0.3 * n * dep), a); };
+    if (warm < 0.03) { const hot = A > 0.85; put(hot ? paths[5] : junk); put(hot ? junk : paths[cls]); } // a few squares warm towards copper where disorder peaks
+    else put(paths[cls]);
+  }
+  paths.forEach((p, c) => { g.pen(ctx, WEIGHT[c], ALPHA[c], c === 4 ? g.c.tint1 : c === 5 ? g.c.accent : g.c.ink); ctx.stroke(p); });
 }
 
 const mountPiece = (el, o) => mount(el, { piece: { meta, draw }, ...o });

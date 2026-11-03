@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8"><title>genart perf</title>
+<style>body{margin:0;font:13px ui-monospace,monospace}#o{position:fixed;top:0;left:0;background:#fff;padding:4px;z-index:9}</style>
+<!-- usage: perf.html?piece=<id>[&theme=&aspect=]. Runs the piece live at 1000x1250 CSS px for 10 s (&secs=N to change); result in #o and window.__perf.
+     Frame gaps are rAF intervals; draw ms is the cost of the engine's paint call (includes draw). -->
+<div id="o">running...</div><div id="host" style="width:1000px;height:1250px"></div>
+<script type="module">
+const q = new URLSearchParams(location.search), M = await import('./' + q.get('piece') + '.mjs');
+const inst = M.mount(document.getElementById('host'), { seed: 1, aspect: q.get('aspect') || '4:5', theme: q.get('theme') || 'mono' });
+const gaps = [], draws = [], secs = +(q.get('secs') || 10); let last = 0, blank = 0, n = 0, over40 = 0;
+const orig = M.draw; // timing wrapper is not possible on the module's own binding; measure frames and gaps, draw cost via offline render below
+const tick = ts => { if (last) { gaps.push(ts - last); if (ts - last > 40) over40++; } last = ts; if (++n % 10 === 0) { const c = inst.canvas, x = c.getContext('2d'); let a = 0; for (const [u, v] of [[.5, .5], [.3, .3], [.7, .7], [.2, .8]]) a += x.getImageData(u * c.width | 0, v * c.height | 0, 1, 1).data[3]; if (!a) blank++; } requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+await new Promise(r => setTimeout(r, secs * 1000));
+const P = { meta: M.meta, draw: M.draw }, cv = document.createElement('canvas'); cv.width = inst.canvas.width; cv.height = inst.canvas.height;
+let dt = 0; const timed = { meta: M.meta, draw: (...a) => { const s = performance.now(); M.draw(...a); dt += performance.now() - s; } };
+for (let i = 0; i < 60; i++) { dt = 0; M.render(timed, cv.getContext('2d'), { seed: 1, t: i / 6, w: cv.width, h: cv.height, theme: 'mono' }); draws.push(dt); }
+const med = a => [...a].sort((x, y) => x - y)[a.length >> 1], r = { piece: M.meta.id, canvas: inst.canvas.width + 'x' + inst.canvas.height, frames: inst.frames, fps: +(inst.frames / secs).toFixed(1), secs, gapsOver40ms: over40, blankFrames: blank, medianGapMs: +med(gaps).toFixed(1), maxGapMs: +Math.max(...gaps).toFixed(1), q: inst.q, drawMedianMs: +med(draws).toFixed(2), drawMaxMs: +Math.max(...draws).toFixed(2) };
+window.__perf = r; document.getElementById('o').textContent = JSON.stringify(r);
+</script>

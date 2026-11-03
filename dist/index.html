@@ -1,31 +1,123 @@
 <!doctype html>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>genart contact sheet</title>
+<title>genart preview</title>
 <style>
-body{margin:0;font:14px/1.4 system-ui,sans-serif;background:#d9d7d2;color:#1B1A18}
-header{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;padding:12px 16px;border-bottom:1px solid #9E9C98}
+html,body{margin:0;height:100%}
+body{display:flex;flex-direction:column;font:13px/1.4 system-ui,sans-serif;background:#d9d7d2;color:#1B1A18}
+header{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;padding:10px 16px}
+header b{font-size:15px}
 label{display:flex;gap:6px;align-items:center}
-main{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;padding:16px}
-figure{margin:0}figcaption{padding:4px 0;font-size:12px}
-iframe{display:block;width:100%;border:0}
+select,input,button{font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:4px;padding:3px 8px}
+button{cursor:pointer}
+#info{flex:1;min-width:200px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#stage{flex:1;min-height:0;position:relative;overflow:hidden;display:grid;place-items:center}
+nav{display:flex;gap:10px;overflow-x:auto;padding:10px 16px 14px}
+nav figure{margin:0;flex:none;cursor:pointer;opacity:.75}
+nav figure.on{opacity:1;outline:1px solid currentColor;outline-offset:3px}
+nav figcaption{font-size:11px;padding-top:4px;white-space:nowrap}
+nav div{position:relative;height:88px;overflow:hidden}
 </style>
-<header><strong>genart</strong>
+<header><b>genart</b>
 <label>theme <select id="theme"><option>mono<option>fieldnotes<option>night</select></label>
 <label>aspect <select id="aspect"><option>4:5<option>16:9<option>1:1</select></label>
-<label>seed <input id="seed" value="1" size="8"></label>
-<label>t (s, blank = live) <input id="t" size="5"></label></header>
-<main id="m"></main>
+<label>seed <input id="seed" value="1" size="6"></label>
+<button id="rnd" title="S">new seed</button>
+<label title="Piece pages honour the system Reduce Motion setting; the preview overrides it unless ticked"><input type="checkbox" id="rm" style="padding:0"> respect Reduce Motion</label>
+<label title="Speed, 0.1x to 3x. Double-click resets; keys [ and ] step it. Remembered per piece."><input type="range" id="spd" min="-1" max="1" step="0.01" value="0" style="width:110px;padding:0;border:0"><span id="spv" style="display:inline-block;width:3.2em">1.00x</span></label>
+<button id="fs" title="F">fullscreen</button>
+<span id="info"></span></header>
+<main id="stage"></main>
+<nav id="nav"></nav>
 <script type="module">
-const pieces = await (await fetch('pieces.json')).json(), $ = id => document.getElementById(id), m = $('m');
-const figs = pieces.map(p => { const f = document.createElement('figure'); f.innerHTML = `<iframe title="${p.title}"></iframe><figcaption>${p.id}: ${p.title}</figcaption>`; m.append(f); return [p, f.firstChild]; });
-function go() {
-  const a = $('aspect').value;
-  m.style.gridTemplateColumns = a === '16:9' ? 'repeat(auto-fill,minmax(420px,1fr))' : '';
-  for (const [p, fr] of figs) {
-    const q = new URLSearchParams({ seed: $('seed').value, aspect: a, theme: $('theme').value }); if ($('t').value) q.set('t', $('t').value);
-    fr.style.aspectRatio = a.replace(':', '/'); fr.src = `${p.file}?${q}`;
-  }
-  document.body.style.background = { mono: '#d9d7d2', fieldnotes: '#d9d8d3', night: '#08090b' }[$('theme').value];
+const $ = id => document.getElementById(id), stage = $('stage'), nav = $('nav'), info = $('info');
+const BG = { mono: '#d9d7d2', fieldnotes: '#d9d8d3', night: '#08090b' }, FG = { mono: '#1B1A18', fieldnotes: '#141518', night: '#EAE7E0' };
+const H = new URLSearchParams(location.hash.slice(1));
+for (const k of ['theme', 'aspect', 'seed']) if (H.has(k)) $(k).value = H.get(k);
+let pieces = [], cur = H.get('piece') || '', live = null, liveBytes = 0, stale = false, listed = '';
+const thumbs = new Map();
+const load = p => import(`./${p.module}?b=${p.bytes}`);
+// speed slider: log scale, value = 10^x (x in -1..1), kept per piece in localStorage; applied live via live.speed
+const spdKey = id => 'genart.speed.' + id, spd = () => Math.pow(10, +$('spd').value);
+const store = (id, v) => { try { v == null ? localStorage.removeItem(spdKey(id)) : localStorage.setItem(spdKey(id), v); } catch {} };
+const fetchSpd = id => { try { return +localStorage.getItem(spdKey(id)) || 0; } catch { return 0; } };
+function setSpd(x, save = true) { x = Math.max(-1, Math.min(1, x)); $('spd').value = x; $('spv').textContent = spd().toFixed(2) + 'x'; if (live) live.speed = spd(); if (save && cur) store(cur, x || null); }
+const opts = () => ({ seed: $('seed').value, aspect: $('aspect').value, theme: $('theme').value, fit: true });
+
+async function mountThumb(t) { // static still of one piece; only called when theme/aspect/seed or that piece's build changed
+  const o = opts(); try { const m = await load(t.p), [aw, ah] = o.aspect.split(':').map(Number);
+    t.box.style.width = 88 * aw / ah + 'px'; t.mod?.destroy(); t.mod = m.mount(t.box, { ...o, t: t.p.still * t.p.T }); } catch {}
 }
-['theme', 'aspect', 'seed', 't'].forEach(i => $(i).addEventListener('change', go)); go();
+async function show(thumbsToo = true) { // (re)mount the live piece; the poll never calls this by itself
+  const p = pieces.find(p => p.id === cur) || pieces[0]; if (!p) return;
+  cur = p.id; live?.destroy(); live = null;
+  const o = opts(); document.body.style.background = BG[o.theme]; document.body.style.color = FG[o.theme];
+  history.replaceState(null, '', '#' + new URLSearchParams({ piece: cur, theme: o.theme, aspect: o.aspect, seed: o.seed }));
+  try { live = (await load(p)).mount(stage, { ...o, reduce: $('rm').checked ? undefined : false }); liveBytes = p.bytes; stale = false; setSpd(fetchSpd(p.id), false); }
+  catch (e) { info.textContent = 'could not load ' + p.id + ': ' + e.message; return; }
+  nav.querySelectorAll('figure').forEach(f => f.classList.toggle('on', f.dataset.id === cur));
+  if (thumbsToo) thumbs.forEach(mountThumb);
+}
+const pick = id => { cur = id; show(false); };
+function list(next) { // add new thumbnails, refresh changed ones, never touch the live piece
+  const first = !pieces.length; pieces = next;
+  for (const p of pieces) {
+    let t = thumbs.get(p.id);
+    if (!t) {
+      const fig = document.createElement('figure'), box = document.createElement('div');
+      fig.dataset.id = p.id; fig.append(box); fig.insertAdjacentHTML('beforeend', `<figcaption>${p.id.split('-')[0].toUpperCase()} ${p.title}</figcaption>`);
+      fig.onclick = () => pick(p.id); t = { p, fig, box, mod: null }; thumbs.set(p.id, t); mountThumb(t);
+    } else if (t.p.bytes !== p.bytes) { t.p = p; mountThumb(t); }
+  }
+  for (const p of pieces) nav.append(thumbs.get(p.id).fig);
+  const c = pieces.find(p => p.id === cur); if (first || !live) show(false); else if (c && c.bytes !== liveBytes) stale = true;
+}
+async function poll() {
+  try { const r = await (await fetch('pieces.json?' + Date.now())).json(), s = JSON.stringify(r.map(p => [p.id, p.bytes]));
+    if (s !== listed) { listed = s; list(r); } } catch {}
+}
+['theme', 'aspect', 'seed', 'rm'].forEach(i => $(i).addEventListener('change', show));
+$('spd').oninput = () => setSpd(+$('spd').value); $('spd').ondblclick = () => setSpd(0);
+$('rnd').onclick = () => { $('seed').value = Math.floor(Math.random() * 9999); show(); };
+$('fs').onclick = () => stage.requestFullscreen?.();
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.metaKey || e.ctrlKey) return;
+  const i = pieces.findIndex(p => p.id === cur), cyc = id => { const s = $(id); s.selectedIndex = (s.selectedIndex + 1) % s.options.length; show(); };
+  if (e.key === 'ArrowRight') pick(pieces[(i + 1) % pieces.length].id);
+  else if (e.key === 'ArrowLeft') pick(pieces[(i - 1 + pieces.length) % pieces.length].id);
+  else if (e.key === 't') cyc('theme'); else if (e.key === 'a') cyc('aspect'); else if (e.key === 's') $('rnd').click(); else if (e.key === 'f') $('fs').click(); else if (e.key === 'r') show(false); else if (e.key === '[') setSpd(+$('spd').value - 0.05); else if (e.key === ']') setSpd(+$('spd').value + 0.05);
+});
+// diagnostics: last error, and BLANK? when a 32x40 downscale of the live canvas has no ink for 2 s
+let lastErr = '', blankN = 0; const probe = Object.assign(document.createElement('canvas'), { width: 32, height: 40 }), pctx = probe.getContext('2d', { willReadFrequently: true });
+const err = m => { lastErr = String(m).slice(0, 120); };
+addEventListener('error', e => err(e.message)); addEventListener('unhandledrejection', e => err(e.reason?.message || e.reason));
+function blank() { try { pctx.drawImage(live.canvas, 0, 0, 32, 40); const d = pctx.getImageData(0, 0, 32, 40).data, l = []; for (let i = 0; i < d.length; i += 4) l.push(d[i] + d[i + 1] + d[i + 2]);
+  const sorted = [...l].sort((a, b) => a - b), med = sorted[l.length >> 1]; blankN = l.some(v => Math.abs(v - med) > 12) ? 0 : blankN + 1; } catch {} return blankN >= 4; }
+let n0 = 0; setInterval(() => { if (!live) return; const f = live.frames, p = pieces.find(p => p.id === cur);
+  info.textContent = `${p.title}${p.math ? ' [' + p.math + ']' : ''} (loop ${p.T}s) · speed ${spd().toFixed(2)}x · q ${live.q.toFixed(2)} · ${live.canvas.dataset.state} · ${(f - n0) * 2} fps · ${matchMedia('(prefers-reduced-motion: reduce)').matches ? 'system Reduce Motion is ON' : 'Reduce Motion off'} · keys: ← → piece, t theme, a aspect, s seed, f fullscreen, r reload this piece${stale ? ' · NEW BUILD of this piece: press r' : ''}${blank() ? ' · BLANK?' : ''}${lastErr ? ' · ERR: ' + lastErr : ''}`; n0 = f; }, 500);
+poll(); setInterval(poll, 5000);
+// BENCH MODE: #bench=1 cycles every piece live (2 s warm-up, 10 s measured) and POSTs one JSON text per piece to :48302/log
+if (H.has('bench')) (async () => {
+  const ov = Object.assign(document.createElement('div'), {}); ov.style.cssText = 'position:fixed;left:12px;bottom:12px;padding:6px 10px;background:#000c;color:#fff;font:13px ui-monospace,monospace;z-index:9';
+  document.body.append(ov); const url = 'http://' + location.hostname + ':48302/log', wait = ms => new Promise(r => setTimeout(r, ms));
+  const send = o => { const b = JSON.stringify(o); try { if (!navigator.sendBeacon(url, b)) throw 0; } catch { fetch(url, { method: 'POST', body: b, keepalive: true, mode: 'no-cors' }).catch(() => {}); } };
+  const pc = (a, q) => a.length ? [...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(a.length * q))] : null, r2 = v => v == null ? null : +v.toFixed(2);
+  while (!pieces.length) await wait(200);
+  const list = [...pieces]; let done = 0;
+  for (const p of list) {
+    const res = { bench: 1, piece: p.id, theme: $('theme').value, aspect: $('aspect').value, seed: $('seed').value, dpr: devicePixelRatio, screen: [screen.width, screen.height], ua: navigator.userAgent };
+    try {
+      cur = p.id; await show(false); if (!live) throw new Error(info.textContent || 'no live instance');
+      const R = stage.getBoundingClientRect(); res.stageCss = [Math.round(R.width), Math.round(R.height)]; res.canvas = [live.canvas.width, live.canvas.height];
+      for (let s = 2; s > 0; s--) { ov.textContent = `bench ${done + 1}/${list.length} ${p.id}: warm-up ${s}s`; await wait(1000); }
+      const inst = live, d = [], q0 = inst.qSteps, f0 = inst.frames; let last = 0, run = true; const t0 = performance.now();
+      const tick = ts => { if (last) d.push(ts - last); last = ts; if (run) requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+      while (performance.now() - t0 < 10000) { ov.textContent = `bench ${done + 1}/${list.length} ${p.id}: ${Math.ceil(10 - (performance.now() - t0) / 1000)}s left`; await wait(250); }
+      run = false; const dm = inst.drawMs.slice(-Math.max(1, inst.frames - f0));
+      Object.assign(res, { n: d.length, medianMs: r2(pc(d, .5)), p95Ms: r2(pc(d, .95)), p99Ms: r2(pc(d, .99)), maxMs: r2(Math.max(0, ...d)), over25: d.filter(v => v > 25).length, over40: d.filter(v => v > 40).length,
+        q: r2(inst.q), qSteps: inst.qSteps - q0, drawMedianMs: r2(pc(dm, .5)), drawP95Ms: r2(pc(dm, .95)), drawMaxMs: r2(Math.max(0, ...dm)), state: inst.canvas.dataset.state, lastError: lastErr || null });
+    } catch (e) { res.error = String(e.message || e).slice(0, 200); }
+    send(res); done++;
+  }
+  ov.textContent = `done, ${done} pieces`; send({ bench: 1, done, pieces: list.map(p => p.id) });
+})();
 </script>

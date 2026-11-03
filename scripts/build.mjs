@@ -8,7 +8,8 @@ const helpers = strip(rd('src/genart.js'));
 const names = 'meta,draw,render,theme,exportPNG,exportWebm,exportFrames';
 const boot = id => `
 const q = new URLSearchParams(location.search), o = { seed: q.get('seed') ?? '1', aspect: q.get('aspect') || undefined,
-  theme: q.get('theme') || 'mono', t: q.has('t') ? +q.get('t') : undefined, params: {}, fit: true };
+  theme: q.get('theme') || 'mono', t: q.has('t') ? +q.get('t') : undefined, params: {}, fit: true,
+  reduce: q.has('reduce') ? q.get('reduce') === '1' : undefined };
 q.forEach((v, k) => k.startsWith('p.') && (o.params[k.slice(2)] = +v));
 document.body.style.background = theme(o.theme).paper;
 const ex = q.get('export'), P = { meta, draw }, sz = q.get('size') || undefined;

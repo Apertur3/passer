@@ -7,6 +7,10 @@ Monochrome: grey paper, near-black ink. The look is pen-plotter and early comput
 
 ## 1. Taste principles
 
+0. **The owner's eye outranks every number in this spec.** Gates (speed band, rests, coverage,
+   loop closure) are guides that keep pieces alive and honest; when a gate fights the beauty of a
+   piece, keep the beauty and say so in the report. Mathematical wonder (a pure object drawn
+   clearly, moving the way the mathematics moves) beats decoration and beats rule-compliance.
 1. **One rule, stated plainly.** Every piece can be described in one sentence ("a grid of
    squares that loses its order row by row"). If it cannot, cut until it can.
 2. **Order versus disorder is the drama.** Randomness is seasoning on a system, never the system.
@@ -14,11 +18,17 @@ Monochrome: grey paper, near-black ink. The look is pen-plotter and early comput
    that colour does elsewhere. A grain-free render is unfinished.
 4. **Line and dot are the only marks.** Tone comes from density (hatching, halftone, line
    count), not from gradient fills.
-5. **Slow, with rests.** Motion breathes and pauses. A piece that never rests feels like a
-   screensaver.
+5. **Always moving, never repeating.** Motion rarely stops (a pause of at most 1 s is fine)
+   and tempo breathes between a slow swell and a quick gesture. Live, the piece keeps evolving
+   and never visibly repeats; the exact loop exists for exports. A piece that holds still reads
+   as broken, not calm.
 6. **Hairlines in quantity.** Thousands of thin lines beat a few thick ones. Bold marks are rare and deliberate.
 7. **Empty paper is part of the composition.** Generous margins. Not every square needs ink.
-8. **Banned look:** soft gradient blobs, glow, bloom, chromatic aberration, neon or purple
+8. **Variety, not wallpaper.** Every piece shows regions that behave differently at the same
+   moment (order beside chaos, calm beside busy), elements at more than one scale or weight, and
+   a focal event that moves. A uniform field of identical cells doing the same thing is boring
+   however well it is drawn; if a piece can be described as "a grid that wobbles", redesign it.
+9. **Banned look:** soft gradient blobs, glow, bloom, chromatic aberration, neon or purple
    gradients, glassy 3D, drop shadows on UI, rounded "card" frames, particle confetti, and
    any coloured accent strip on a left edge.
 
@@ -87,6 +97,29 @@ their parts.
 They need photoreal shading or blur, which pulls toward the banned look and toward WebGL.
 Revisit only with a concrete reason.
 
+## 4b. Math series
+
+Pieces whose subject is the mathematics itself: the equation is the composition, and the
+caption in the article can state it. Each carries `meta.math`, one plain-text line with the
+defining equation, shown in the preview and used as the article caption. All loops close by
+construction (integer frequencies, closed parameter orbits, or exact group steps), so the
+loop trick is part of the maths, not a patch.
+
+| # | Piece | The mathematics | Drawn as | Loop and motion | Size |
+|---|---|---|---|---|---|
+| M01 | Harmonograph | `x(t)=Σ A_i sin(f_i t+φ_i) e^(-d_i t)`, same for y; two to four terms, near-integer ratios (e.g. 3:2 plus a small detune) | One pen path of about 6k segments, hairline, ink alpha accumulating where it retraces | `φ_1` advances 2π per loop with integer `f`, so the figure family returns; a fresh path is computed each frame | M |
+| M02 | Clifford attractor | `x'=sin(a y)+c cos(a x)`, `y'=sin(b x)+d cos(b y)` | 60k to 100k iterates as device-pixel dots; density gives the tone | `(a,b)` walk a small circle in parameter space: `a=a0+ε cos θ`, `b=b0+ε sin θ`; the cloud folds and unfolds | M |
+| M03 | Epicycles | `z(s)=Σ_k c_k e^(i k s)`, about 12 seeded integer `k`, `\|c_k\|` ∝ `1/\|k\|^1.2` | The closed curve in `tint-2`, the chain of rotating circles at hairline, one pen dot | `s = θ` closes by construction; the chain visibly turns | M |
+| M04 | Chladni figure | `u = cos θ·(cos nπx cos mπy − cos mπx cos nπy) + sin θ·(same with n',m')` | Marching-squares contours: `u=0` as `line`, `u=±0.15, ±0.3` as hair | `θ = 2πp` closes; nodal lines migrate and reconnect | M |
+| M05 | Phyllotaxis | Vogel: `r = c√n`, `φ_n = n·(φ_g + δ(θ))`, `φ_g = 137.5078°`, `δ = 0.35° sin θ` | N≈2500 small circles or dots, size by `r`; fine or halftone | Spiral arms (parastichies) sweep as `δ` oscillates around the golden angle | S |
+| M06 | Hyperbolic tiling | Regular `{p,q}` tiling of the Poincaré disc (e.g. `{5,4}`, `{7,3}`); geodesics are circle arcs orthogonal to the boundary | Edges as arcs plus a hatched checkerboard fill (`q` even); the Escher Circle Limit family | Möbius shift `z→(z+a)/(1+ā z)`, `a = 0.45 sin θ·e^(iψ)`, plus rotation by exactly one `2π/p` step per loop | L |
+| M07 | Apollonian gasket | Descartes: `k4 = k1+k2+k3 ± 2√(k1k2+k2k3+k3k1)`, recurse to depth 6 or 7 | Circle outlines at hairline, smallest ones as dots | Disc automorphism `z→(z−a)/(1−ā z)` with `a = 0.35 e^(iθ)` keeps all tangencies; the packing swirls | M |
+| M08 | Penrose, phason drift | de Bruijn pentagrid: lines `x·e_j + γ_j ∈ ℤ`, `e_j = (cos 2πj/5, sin 2πj/5)`, `Σγ_j = 0` | Rhomb edges plus two-tone hatching | `γ_j = γ0_j + 0.45 cos(θ + 4πj/5)`; the sum stays 0 so it stays Penrose; tiles flip locally | L |
+| M09 | Roulette rosette | Hypotrochoid `x=(R−r)cos u + d cos(((R−r)/r)u)`, `y=(R−r)sin u − d sin(((R−r)/r)u)`, `R/r` rational | About 90 copies, `d` stepped or rotated per copy, hairline | `d(θ)` breathes and the set advances one copy step per loop; moiré rosettes | S |
+
+Math pieces follow every other rule (tokens, themes, motion band, grain, engine contract).
+Draw the mathematics honestly: no decorative jitter on the curves themselves.
+
 ## 5. Tokens
 
 | Token | Hex | Use |
@@ -115,7 +148,11 @@ A theme is five colours; a piece reads them from `g.c` and never hard-codes a he
 cool data colour). Its `paper` is the host's panel colour, because figures sit on tinted bands there.
 Rules for `accent` and `cool` (same spirit as the host: colour is rationed to marks, never surfaces):
 - **Accent:** at most 5% of ink coverage and one deliberate deviation per piece (the one line,
-  tile, row or dot that breaks the rule). Never a fill, never a gradient, never glow.
+  tile, row or dot that breaks the rule). Never a fill, never a gradient, never glow. **Accent is
+  optional and off by default.** Use colour only where it adds meaning to that piece (it marks the
+  exception to the rule, or one object among many). A coloured thing that merely walks around the
+  sheet reads as a magnifying glass or a cursor and is banned; the owner rejected it on F01, F06
+  and F09. If used, it is thin and is part of the system's logic, not a mascot.
 - **Cool:** only as the second layer when a piece has two line systems (e.g. the second moiré grid,
   the shadow dots). A piece never uses accent and cool for the same job.
 - `night` inverts the meaning of ink: marks are light on dark, so halftone dot area follows
@@ -154,20 +191,44 @@ whole-canvas error-diffusion dithering; it looks like a digital filter.
 
 ## 6. Motion spec
 
-- **Loop length T:** 8, 12, 20 or 30 s. Default 20 s. Short loops (8 s) only for avatars.
+- **Loop length T:** 8, 12 or 16 s. Default 12 s. Avatars 8 s. (20 and 30 s are retired: they read as static.)
+- **Alive from frame one.** The live clock starts at `meta.start` (a phase in [0,1) in the middle
+  of peak activity), so the first second after load already shows clear motion.
+  Slow is not imperceptible: a viewer must be able to point at what moves.
+- **Speed band (measured as point speed in units of the short edge S per second):** across the
+  loop, the 75th-percentile point moves at ≥ 0.03 S/s except for pauses of at most 1 s; the 99th percentile never exceeds 0.15 S/s. Every piece has one global motion (a wave, sweep or orbit
+  that crosses the whole composition once per loop) plus local detail. Tempo varies: a slow
+  swell plus a quicker gesture, not one monotone drift.
 - **Phase:** `p = (t / T) % 1`, `θ = 2π p`. All motion is a function of θ, so frame(T) equals
   frame(0) exactly. Never integrate state across frames.
 - **Loop noise:** `loopNoise(x, y, θ, r) = noise4(x, y, r cos θ, r sin θ)` (simplex sampled
   on a circle in 4D). `r` sets how much the field changes per loop: 0.3 calm, 0.8 lively.
+- **Live evolution versus exact loop.** Two render modes. *Loop mode* (exports, video loops,
+  `?t=` frames, tests): everything is a function of `θ`, frame(T) = frame(0) exactly. *Live mode*
+  (the default on screen): the same piece keeps evolving and does not visibly repeat. The
+  engine provides, and every piece uses:
+  - `g.live` (boolean) and `g.drift` (seconds of unbounded slow time in live mode, 0 in loop mode).
+  - `g.voice(k)`: the phase of independent voice `k`. Loop mode: `k·θ` for integer `k ≥ 1`. Live
+    mode: `θ` times `k + ε_k`, with small irrational detunes (`ε_k` such as 0.0, 0.0618, 0.1414,
+    0.0732), so voices drift against each other and the composition only recurs after hours.
+  - `g.loop(x, y, r, th)`: in live mode the sampling circle's centre wanders through noise space
+    with `g.drift`, so noise-driven fields never recur; in loop mode it is the closed circle.
+  Rule: the main wave may keep period `T` in live mode, but at least two other aspects of the
+  piece (amplitude envelope, density, angle delta, pitch, which elements are active) must run
+  on different voices or on `g.drift`, so each pass of the main wave looks different from the last.
 - **Easing:** sine in-out (`0.5 - 0.5 cos πu`) and `smootherstep` only.
   Banned: linear on anything that starts or stops; bounce, elastic, back-overshoot, springs.
   Constant angular speed is fine for continuous rotation (F04) because it never stops.
-- **Breathing:** primary amplitude `a(θ) = 0.5 - 0.5 cos θ`. Add rest: shape with
-  `smootherstep` so at least 20% of each loop moves at under 10% of peak speed.
+- **Breathing:** primary amplitude `a(θ) = 0.5 - 0.5 cos θ`, with a visible range (the piece
+  changes by at least 30% of its amplitude between low and high, not a 5% tremble). Tempo
+  breathes and may pause rarely, for at most 1 s. Prefer circulating motion (orbits, travelling waves, a
+  phase that keeps advancing) over back-and-forth, which dwells at its extremes; where a
+  reversal is unavoidable, overlap it with another element that is mid-move.
 - **Stagger:** element phase offset `φ_i = k · u_i`, where `u_i ∈ [0,1)` is position along
   one axis and `k ≤ 0.5`. Offsets wrap because everything is periodic.
-- **Speed ceilings:** any point ≤ 0.02 S per second typical, 0.05 S/s hard limit; rotation
-  ≤ 6°/s; a discrete event (tile flip) lasts at least 0.6 s, with no more than 3 starting per second.
+- **Ceilings:** point speed ≤ 0.15 S/s (see the speed band); an individual element rotates
+  ≤ 15°/s, a whole figure ≤ 8°/s; a discrete event (tile flip) lasts at least 0.5 s, with no
+  more than 4 starting per second.
 - **Reduced motion:** each piece declares `still` (a phase in [0,1), its most composed frame).
   With `prefers-reduced-motion: reduce`, render `t = still · T` once and stop. The PNG
   export uses the same frame.
@@ -256,7 +317,17 @@ Heavy families (F05, F10, F11) cache static layers on an offscreen canvas and re
 7. **Palette:** `mono`: every pixel has saturation under 0.04 (HSL). `fieldnotes` and `night`:
    sampled pixels are only mixes of the theme's colours (hue check), and `accent` pixels cover
    at most 5% of the ink coverage.
-8. **Motion:** sampled point speeds stay under 0.05 S/s; at least 20% of the loop is a rest;
-   no easing outside section 6.
+8. **Motion:** point-speed band of section 6 (p75 ≥ 0.03 S/s with no stretch over 1 s below it,
+   p99 ≤ 0.15 S/s); pauses of at most 1 s, rare; motion is visible within the
+   first second after load; no easing outside section 6. A piece that fails the lower bound is
+   too static even if every other check passes.
+8b. **Smoothness:** in a real browser at the largest preview size (a 4:5 canvas of about 1000 x
+   1250 CSS px at DPR 2, which the engine caps at 2.5 MP), 10 s of live running shows no frame
+   gap over 40 ms and a median frame time under 17 ms. Heavy pieces scale their element counts
+   by `g.q`, the engine's adaptive quality factor (1 in tests and exports).
+11. **Evolves live:** in live mode, the point configuration at `t + T` differs from the one at
+   `t`: median point displacement ≥ 0.02 S over at least 30% of the points, for several `t`
+   across 60 s. In loop mode checks 1 and 2 still hold unchanged.
 9. **Reduced motion:** with the setting on, exactly one frame is drawn and it equals the PNG export.
+12. **Not blank:** at `still`, 0.25 T, 0.5 T and 0.75 T (loop mode) between 0.5% and 40% of pixels differ from a paper-only render of the same size by more than 6/255 luminance; a piece that draws nothing must fail.
 10. **Network and payload:** devtools shows zero requests after the piece file; file under 30 KB.
