@@ -1,8 +1,3 @@
-<!doctype html>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Knoop</title>
-<style>html,body{margin:0;height:100%}body{display:grid;place-items:center;overflow:hidden}</style>
-<script type="module">
 // genart.js: shared helpers for every piece. Plain ES module, no dependencies.
 // Built into each piece's dist file by scripts/build.mjs (exports are stripped there).
 
@@ -245,135 +240,73 @@ async function exportFrames(piece, o = {}, fps = 30) { // needs a user gesture f
 }
 function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e4); }
 
-// V02 Knoop (an interlaced torus knot, turning in space, with true over and under).
-// One rule: a torus knot is drawn as a ribbon of three coloured pencil lines, rotated slowly in 3D, and wherever two parts of the ribbon cross, the part nearer to us is unbroken and the part behind it is cut.
+// V07 Droste: tumbling cubes on a lattice of the log plane, spiralling into themselves (Print Gallery).
+// One rule: w = log z. A pattern periodic under 2*pi*i (single valued on screen) and under a skew vector G*rho is a Droste picture:
+// I(z) = I(e^c z). Lattice basis g1 = G, g2 = G*rho with G = 2*pi*i / (n1 + n2*rho), so n1 g1 + n2 g2 = 2*pi*i for every rho:
+// the skew rho may drift without ever opening a seam. Cubes are drawn in lattice coordinates u, w = G (u1 + rho u2), z = exp(w).
 const meta = {
-  id: 'v02-knoop', pencils: true, title: 'Knoop', nl: 'Knoop', T: 16, still: 0.51, start: 0.01, aspects: ['4:5', '16:9', '1:1'],
-  math: 'x = (R + r cos qt) cos pt,  y = (R + r cos qt) sin pt,  z = r sin qt  (torus knot T(p,q); the trefoil is T(2,3))',
-  label: 'A torus knot drawn as a ribbon of three pencil lines turns slowly in space and melts from the trefoil into five-crossing and larger knots, with every crossing cut so the nearer strand passes over.',
-  // r: tube radius over core radius; spacing: distance between the three lines (S); gap: cut either side of an over strand (S);
-  // twist: how much the ribbon turns edge-on in 3D (0 = flat ribbon facing us); seg: samples around the knot at q = 1
-  params: { pitch: 0.3, r: 0.5, spacing: 0.0125, gap: 0.0045, twist: 0.3, seg: 520 },
+  id: 'v07-droste', title: 'Droste', nl: 'Spiraal in zichzelf', T: 24, still: 0.3, start: 0.25, aspects: ['4:5', '16:9', '1:1'],
+  math: 'z = exp(w), w = G (u1 + rho u2), G = 2 pi i / (n1 + n2 rho); the cube pattern is periodic in u, shifted by tau (k1,k2), tau = t/T, so tau = 1 is the identity',
+  label: 'A field of pencil-hatched cubes in three tones, wound into a logarithmic spiral that contains a smaller twisted copy of itself and zooms endlessly inward, after the Droste effect and Escher\'s Print Gallery.',
+  // arms: which (n1, n2) winding, 0 = by seed; drift: size of the slow live drift of the skew
+  params: { arms: 0, drift: 1 },
 };
 
-const TAU = 2 * Math.PI, KN = [[2, 3], [2, 5], [3, 5], [3, 4]]; // the metamorphosis cycle
-const SEG = [0, 0.17, 0.5, 0.67, 1]; // loop fraction at which each knot of KN is reached
-const sm = u => { u = Math.min(1, Math.max(0, u)); return u * u * u * (u * (u * 6 - 15) + 10); };
-// scratch, only grown, never read across frames
-const SC = { n: 0, X: null, Y: null, Z: null, mp: null, mu: null, next: null, head: new Int32Array(4096) };
+const PAIRS = [[9, 5], [11, 4], [10, 7], [8, 3]], H3 = 0.8660254, TAU = 2 * Math.PI;
+const U = (x, y) => { const b = y / H3; return [x - b / 2, b]; }; // canonical hex plane (u1 + e^{i pi/3} u2) -> lattice coordinates
+const V = [0, 1, 2, 3, 4, 5].map(k => { const a = (30 + 60 * k) * Math.PI / 180; return U(Math.cos(a) / Math.sqrt(3), Math.sin(a) / Math.sqrt(3)); });
+const C0 = [0, 0], FACES = [[C0, V[0], V[2]], [C0, V[2], V[4]], [C0, V[4], V[0]]]; // top, left, right rhombus: centre, two spanning vertices
+const EDGES = [[C0, V[0]], [C0, V[2]], [C0, V[4]], [V[0], V[1]], [V[1], V[2]], [V[2], V[3]]]; // 3 spokes + 3 rim edges (the other 3 belong to neighbours)
+const NL = [3, 8, 16], sm = u => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 
-function draw(ctx, { g }) {
-  const P = g.params, rr = g.rng('knot'), a0 = rr() * TAU, a1 = rr() * TAU, a2 = rr() * TAU;
-  const N = Math.max(320, Math.round(P.seg * Math.min(1, g.q ?? 1))), sp = P.spacing, lwid = g.lw('line') * 1.3;
-  if (SC.n < N) { SC.n = N; SC.X = new Float32Array(N * 3); SC.Y = new Float32Array(N * 3); SC.Z = new Float32Array(N); SC.W = new Float32Array(N); SC.next = new Int32Array(N); }
-  const { X, Y, Z, W, head, next } = SC;
-  // which knot, and how far it has melted into the next one (a short hold, then a smooth blend)
-  // (a change of q only slides the tube, a change of p moves the whole knot round the axis, so p changes get twice the time)
-  const F0 = g.voice(1) / TAU, F = F0 - Math.floor(F0); let i0 = 0; while (i0 < 3 && F >= SEG[i0 + 1]) i0++;
-  const f = (F - SEG[i0]) / (SEG[i0 + 1] - SEG[i0]), b = sm((f - 0.18) / 0.64);
-  const A = KN[i0], B = KN[(i0 + 1) % 4], R = 1, r = P.r;
-  // rotation: a steady spin about the torus axis (a third of a turn per loop: the trefoil looks the same after that, so the loop closes),
-  // plus a pitch that tips the torus toward us and a yaw, each on its own slowly detuned voice
-  const spin = g.voice(1) / KN[0][1], pitch = P.pitch + 0.12 * Math.sin(g.voice(2) + a1) + 0.08 * Math.sin(g.drift * 0.11), yaw = 0.14 * Math.sin(g.voice(3) + a2) + 0.06 * Math.sin(g.drift * 0.07 + a0);
-  const cs = Math.cos(spin), ss = Math.sin(spin), cp = Math.cos(pitch), sP = Math.sin(pitch), cy = Math.cos(yaw), sy = Math.sin(yaw);
-  // M = Ry * Rx * Rz applied to a model vector (x, y, z); rows give screen x, screen y, depth (toward us)
-  const m00 = cy * cs + sy * sP * ss, m01 = -cy * ss + sy * sP * cs, m02 = sy * cp;
-  const m10 = cp * ss, m11 = cp * cs, m12 = -sP;
-  const m20 = -sy * cs + cy * sP * ss, m21 = sy * ss + cy * sP * cs, m22 = cy * cp;
-  const sc = Math.min(g.bx, g.by) / (R + r) * 0.97, tw = P.twist;
-
-  // sample the blended knot: position, ribbon direction in the surface (tangent x torus normal), all in model space first
-  if (!SC.mp || SC.mp.length < 3 * N) { SC.mp = new Float32Array(3 * N); SC.mu = new Float32Array(3 * N); }
-  const mp = SC.mp, mu = SC.mu;
-  for (let i = 0; i < N; i++) {
-    const s = (i / N) * TAU; let x = 0, y = 0, z = 0, ux = 0, uy = 0, uz = 0, rho = 0;
-    for (let e = 0; e < 2; e++) {
-      const [p, q] = e ? B : A, wgt = e ? b : 1 - b, c = q * s, a = p * s, ca = Math.cos(a), sa = Math.sin(a), cc = Math.cos(c), sc2 = Math.sin(c);
-      x += wgt * ca; y += wgt * sa; rho += wgt * (R + r * cc); z += wgt * r * sc2; ux += wgt * cc * ca; uy += wgt * cc * sa; uz += wgt * sc2;
-    }
-    const dl = Math.hypot(x, y) || 1, k = rho / Math.sqrt(dl); x *= k; y *= k; // half-way between a plain blend and one that keeps the radius: a strand dips toward the axis but never pops across it
-    mp[i * 3] = x; mp[i * 3 + 1] = y; mp[i * 3 + 2] = z; mu[i * 3] = ux; mu[i * 3 + 1] = uy; mu[i * 3 + 2] = uz;
-  }
-  const o = P.spacing;
-  for (let i = 0; i < N; i++) {
-    const a = ((i + N - 1) % N) * 3, c = ((i + 1) % N) * 3, k = i * 3;
-    const tx = mp[c] - mp[a], ty = mp[c + 1] - mp[a + 1], tz = mp[c + 2] - mp[a + 2];
-    // ribbon direction bn = t x u, normalised; rotated into the view
-    let bx = ty * mu[k + 2] - tz * mu[k + 1], by = tz * mu[k] - tx * mu[k + 2], bz = tx * mu[k + 1] - ty * mu[k];
-    const bl = Math.hypot(bx, by, bz) || 1; bx /= bl; by /= bl; bz /= bl;
-    const sx = m00 * mp[k] + m01 * mp[k + 1] + m02 * mp[k + 2], sY = m10 * mp[k] + m11 * mp[k + 1] + m12 * mp[k + 2];
-    const dx = (m00 * mp[c] + m01 * mp[c + 1] + m02 * mp[c + 2]) - (m00 * mp[a] + m01 * mp[a + 1] + m02 * mp[a + 2]);
-    const dy = (m10 * mp[c] + m11 * mp[c + 1] + m12 * mp[c + 2]) - (m10 * mp[a] + m11 * mp[a + 1] + m12 * mp[a + 2]);
-    const dl = Math.hypot(dx, dy) || 1e-9, nx = -dy / dl, ny = dx / dl;
-    const pbx = m00 * bx + m01 * by + m02 * bz, pby = m10 * bx + m11 * by + m12 * bz; // ribbon direction as seen on screen
-    let vx = nx * (1 - tw) + pbx * tw, vy = ny * (1 - tw) + pby * tw; // blend of screen normal and the 3D ribbon direction
-    if (vx * nx + vy * ny < 0) { vx = -vx; vy = -vy; } // keep the line order (never swap lines mid-ribbon)
-    W[i] = Math.hypot(vx, vy) * o; // half the ribbon width here (it narrows where the ribbon turns edge-on)
-    vx *= o; vy *= o;
-    const X0 = sx * sc, Y0 = sY * sc; Z[i] = (m20 * mp[k] + m21 * mp[k + 1] + m22 * mp[k + 2]) * sc;
-    for (let l = 0; l < 3; l++) { X[l * N + i] = X0 + (l - 1) * vx; Y[l * N + i] = Y0 + (l - 1) * vy; }
-  }
-  const CX = X.subarray(N, 2 * N), CY = Y.subarray(N, 2 * N); // centre line = middle line of the ribbon
-  // the construction: the torus's core circle, faint, in the same view
-  g.pen(ctx, 'hair', 1, g.c.tint2); ctx.beginPath();
-  for (let i = 0; i <= 96; i++) { const a = (i / 96) * TAU, x = Math.cos(a), y = Math.sin(a), px = (m00 * x + m01 * y) * sc, py = (m10 * x + m11 * y) * sc; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
-  ctx.stroke();
-  const cols = g.c.accent === g.c.ink ? [g.c.ink, g.c.tint1, g.c.ink] : [g.c.accent, g.c.cool, g.c.third], wj = [1, 0.9, 1.07];
-  ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
-  if (typeof document === 'undefined') { // headless motion test: whole ribbons only (the cuts change the point count between frames)
-    for (let l = 0; l < 3; l++) { ctx.beginPath(); ctx.moveTo(X[l * N], Y[l * N]); for (let i = 1; i < N; i++) ctx.lineTo(X[l * N + i], Y[l * N + i]); ctx.closePath(); ctx.stroke(); }
-    return;
-  }
-  // Over and under. Clearance of a point of the ribbon = its distance to the centre line of any part of the knot that is nearer to us here
-  // (not a neighbour along the same curve), minus half a ribbon and the gap. Clearance <= 0 means "behind something": the line is cut there.
-  const cut = sp + lwid + P.gap, ox = -0.6, cell = cut, gl = P.gap + lwid, GW = Math.min(63, Math.ceil(1.2 / cell) + 1);
-  let len = 0; for (let i = 0; i < N; i++) len += Math.hypot(CX[(i + 1) % N] - CX[i], CY[(i + 1) % N] - CY[i]);
-  const win = Math.ceil(3 * cut / (len / N)) + 2; // samples along the same curve that never count as another part of the knot
-  head.fill(-1, 0, GW * GW);
-  for (let q = 0; q < N; q++) { const gx = Math.floor((CX[q] - ox) / cell), gy = Math.floor((CY[q] - ox) / cell), hh = gy * GW + gx; next[q] = head[hh]; head[hh] = q; }
-  const clr = (x, y, z, i) => {
-    const gx = Math.floor((x - ox) / cell), gy = Math.floor((y - ox) / cell); let best = 1e9;
-    for (let yy = gy - 1; yy <= gy + 1; yy++) for (let xx = gx - 1; xx <= gx + 1; xx++) {
-      for (let q = head[yy * GW + xx]; q >= 0; q = next[q]) {
-        let dq = q - i; dq = dq < 0 ? -dq : dq; if (dq > N - dq) dq = N - dq;
-        if (dq <= win || Z[q] <= z) continue;
-        const dx = CX[q] - x, dy = CY[q] - y, d = Math.sqrt(dx * dx + dy * dy) - W[q]; if (d < best) best = d;
-      }
-    }
-    return best - gl;
+function draw(ctx, { seed, g }) {
+  const P = g.params, r = g.rng('v07'), pair = PAIRS[P.arms ? (P.arms - 1) % PAIRS.length : Math.floor(r() * PAIRS.length)], n1 = pair[0], n2 = pair[1];
+  const R = Math.min(g.bx, g.by), S = g.S, d = g.drift * P.drift;
+  // skew rho = |rho| e^{i alpha}: drifts on three slow incommensurate voices (zero at d = 0, so loop mode is the canonical cube lattice)
+  const al = Math.PI / 3 + 0.11 * Math.sin(0.019 * d) + 0.05 * Math.sin(0.0113 * d + 1), md = 1 + 0.045 * Math.sin(0.0141 * d) + 0.03 * Math.sin(0.0071 * d + 2);
+  const rr = md * Math.cos(al), ri = md * Math.sin(al), dn = (n1 + n2 * rr) ** 2 + (n2 * ri) ** 2;
+  const Gr = TAU * (n2 * ri) / dn, Gi = TAU * (n1 + n2 * rr) / dn; // G = 2 pi i / (n1 + n2 rho)
+  const Hr = Gr * rr - Gi * ri, Hi = Gr * ri + Gi * rr; // G rho
+  // translation vector (k1, k2) in lattice steps: mostly zoom, some twist; searched on the canonical lattice so it is fixed per seed pair
+  let k1 = 0, k2 = 0, best = 1e9; { const dn0 = (n1 + n2 / 2) ** 2 + (n2 * H3) ** 2, a = TAU * n2 * H3 / dn0, b = TAU * (n1 + n2 / 2) / dn0;
+    for (let i = -40; i <= 40; i++) for (let j = -40; j <= 40; j++) { const re = a * i + (a / 2 - b * H3) * j, im = b * i + (b / 2 + a * H3) * j, e = (re - 4.8) ** 2 + (im - 2.2) ** 2; if (e < best) { best = e; k1 = i; k2 = j; } } }
+  const tau = g.p, s1 = tau * k1, s2 = tau * k2; // shift in lattice coordinates; tau = 1 is a lattice vector, so frame(T) = frame(0)
+  const Gm = Math.hypot(Gr, Gi), reLo = Math.log(3.5 / S / Gm), reHi = Math.log(R + Gm), det = Gr * Hi - Gi * Hr;
+  // bounding box of the lattice cells whose centres have Re w in [reLo, reHi] and Im w in [0, 2 pi): preimage of that rectangle
+  let pa = 1e9, pb = -1e9, qa = 1e9, qb = -1e9;
+  for (const [x, y] of [[reLo, 0], [reHi, 0], [reLo, TAU], [reHi, TAU]]) { const u = (x * Hi - y * Hr) / det, v = (Gr * y - Gi * x) / det; pa = Math.min(pa, u); pb = Math.max(pb, u); qa = Math.min(qa, v); qb = Math.max(qb, v); }
+  const NB = 4, mk = () => Array.from({ length: NB }, () => new Path2D()), PATH = [mk(), mk(), mk(), mk()]; // outline, light, mid, dark
+  const add = (path, wr, wi, vr, vi, rpx) => { // straight segment in w, subdivided so the image keeps under about 0.25 px of sagitta
+    const n = Math.max(1, Math.ceil(Math.hypot(vr - wr, vi - wi) / Math.sqrt(2 / rpx))); let e = Math.exp(wr);
+    path.moveTo(e * Math.cos(wi), e * Math.sin(wi));
+    for (let i = 1; i <= n; i++) { const x = wr + (vr - wr) * i / n, y = wi + (vi - wi) * i / n; e = Math.exp(x); path.lineTo(e * Math.cos(y), e * Math.sin(y)); }
   };
-  ctx.globalAlpha = 0.94;
-  for (let l = 0; l < 3; l++) {
-    ctx.strokeStyle = cols[l]; ctx.lineWidth = lwid * wj[l]; ctx.beginPath();
-    const o = l * N, cl = i => clr(X[o + i], Y[o + i], Z[i], i); let start = -1;
-    for (let i = 0; i < N; i++) if (cl(i) <= 0) { start = i; break; }
-    if (start < 0) { ctx.moveTo(X[o], Y[o]); for (let i = 1; i < N; i++) ctx.lineTo(X[o + i], Y[o + i]); ctx.closePath(); }
-    else {
-      let prev = start, cprev = cl(start), vis = false;
-      for (let st = 1; st <= N; st++) {
-        const i = (start + st) % N, ccur = cl(i);
-        if (!vis && ccur > 0) { const t = -cprev / (ccur - cprev); ctx.moveTo(X[o + prev] + t * (X[o + i] - X[o + prev]), Y[o + prev] + t * (Y[o + i] - Y[o + prev])); ctx.lineTo(X[o + i], Y[o + i]); vis = true; }
-        else if (vis && ccur > 0) ctx.lineTo(X[o + i], Y[o + i]);
-        else if (vis) { const t = cprev / (cprev - ccur); ctx.lineTo(X[o + prev] + t * (X[o + i] - X[o + prev]), Y[o + prev] + t * (Y[o + i] - Y[o + prev])); vis = false; }
-        prev = i; cprev = ccur;
+  const bucket = a => Math.min(NB - 1, Math.max(0, Math.ceil(a * NB) - 1));
+  for (let p = Math.floor(pa - s1) - 1; p <= Math.ceil(pb - s1) + 1; p++) for (let q = Math.floor(qa - s2) - 1; q <= Math.ceil(qb - s2) + 1; q++) {
+    const u1 = p + s1, u2 = q + s2, cr = Gr * u1 + Hr * u2, ci = Gi * u1 + Hi * u2;
+    if (cr < reLo || cr > reHi || ci < 0 || ci >= TAU) continue;
+    const rc = Math.exp(cr), side = Gm / Math.sqrt(3) * rc * S; // rhombus side on screen, px
+    if (rc - Gm * rc * 0.8 > R || side < 4) continue;
+    const rpx = rc * S * 1.5;
+    const wp = (a, b) => [cr + Gr * a + Hr * b, ci + Gi * a + Hi * b];
+    const oa = sm((side - 4) / 8);
+    if (oa > 0.04) for (const [A, B] of EDGES) { const a = wp(A[0], A[1]), b = wp(B[0], B[1]); add(PATH[0][bucket(oa)], a[0], a[1], b[0], b[1], rpx); }
+    for (let f = 0; f < 3; f++) {
+      const [C, A, D] = FACES[f], N = NL[f], tn = 1 + f, hp = side * H3 / N;
+      for (let j = 1; j < N; j++) {
+        const pitch = hp * (j & -j), al2 = sm((pitch - 3) / 3); if (al2 < 0.06) continue;
+        const s = j / N, x = C[0] + s * (D[0] - C[0]), y = C[1] + s * (D[1] - C[1]), a = wp(x, y), b = wp(x + A[0] - C[0], y + A[1] - C[1]);
+        add(PATH[tn][bucket(al2)], a[0], a[1], b[0], b[1], rpx);
       }
     }
-    ctx.stroke();
   }
-  ctx.globalAlpha = 1;
+  ctx.save(); ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.clip();
+  const sty = [['fine', 0.9, g.c.ink], ['hair', 0.55, g.c.ink], ['hair', 0.8, g.c.ink], ['fine', 0.8, g.c.ink]];
+  for (let k = 0; k < 4; k++) for (let b = 0; b < NB; b++) { g.pen(ctx, sty[k][0], sty[k][1] * (b + 1) / NB, sty[k][2]); ctx.stroke(PATH[k][b]); }
+  ctx.restore();
+  g.pen(ctx, 'fine', 1, g.c.ink); ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();
 }
 
 const mountPiece = (el, o) => mount(el, { piece: { meta, draw }, ...o });
 (window.genart ||= {}).mount ??= mountPiece;
-
-const q = new URLSearchParams(location.search), o = { seed: q.get('seed') ?? '1', aspect: q.get('aspect') || undefined,
-  theme: q.get('theme') || 'mono', t: q.has('t') ? +q.get('t') : undefined, params: {}, fit: true,
-  reduce: q.has('reduce') ? q.get('reduce') === '1' : undefined };
-q.forEach((v, k) => k.startsWith('p.') && (o.params[k.slice(2)] = +v));
-document.body.style.background = theme(o.theme).paper;
-const ex = q.get('export'), P = { meta, draw }, sz = q.get('size') || undefined;
-if (ex === 'png') exportPNG(P, { ...o, size: sz }).then(b => save(b, 'v02-knoop.png'));
-else if (ex === 'webm') exportWebm(P, { ...o, size: sz }).then(b => save(b, 'v02-knoop.webm'));
-else if (ex === 'frames') { const b = document.createElement('button'); b.textContent = 'Choose folder'; b.onclick = () => exportFrames(P, { ...o, size: sz }); document.body.append(b); }
-else mountPiece(document.body, o);
-</script>
+export { meta,draw,render,theme,exportPNG,exportWebm,exportFrames, mountPiece as mount };

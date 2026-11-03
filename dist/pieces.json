@@ -141,26 +141,24 @@
  },
  {
   "id": "m02-clifford",
-  "title": "Clifford attractor",
+  "title": "Aizawa attractor",
   "T": 12,
   "still": 0.1,
   "start": 0.25,
-  "dprMax": 1,
   "aspects": [
    "4:5",
    "16:9",
    "1:1"
   ],
-  "math": "x' = sin(a y) + c cos(a x),  y' = sin(b x) + d cos(b y);  (a, b) walk a small circle",
-  "label": "A swarm of particles hopping along a Clifford attractor, each leaving a short comet trail, while the map parameters walk a small circle so the filigree unfolds and refolds; a second, smaller attractor streams beside it.",
+  "math": "dx/dt = (z - b) x - d y,  dy/dt = d x + (z - b) y,  dz/dt = c + a z - z^3/3 - (x^2 + y^2)(1 + e z) + f z x^3;  a = 0.95, b = 0.7, c = 0.6, d = 3.5, e = 0.25, f = 0.1",
+  "label": "A swarm of particles gliding along the Aizawa strange attractor, each with a short comet trail, seen from a slowly turning viewpoint; the density of the swarm draws the folded filigree of the flow.",
   "params": {
-   "seeds": 6500,
-   "eps": 0.07,
-   "dwell": 50
+   "n": 3200,
+   "trail": 3
   },
   "file": "m02-clifford.html",
   "module": "m02-clifford.mjs",
-  "bytes": 24552
+  "bytes": 24131
  },
  {
   "id": "m04-chladni",
@@ -274,83 +272,6 @@
   "bytes": 21789
  },
  {
-  "id": "v01-liggende-acht",
-  "pencils": true,
-  "title": "Liggende acht",
-  "nl": "Liggende acht",
-  "T": 16,
-  "still": 0.5,
-  "start": 0.1,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "x = sin(a t + phi), y = sin(b t), a:b = 1:1, 1:2, 2:3, 3:4; neighbours blended coefficient by coefficient so the curve stays closed; ribbon = 3 copies offset by d along the normal, over/under alternating at the 2ab-a-b crossings",
-  "label": "The lying eight opens into a double loop, then a triple-loop knot and back: one closed Lissajous line drawn as a ribbon of three pencils that passes over and under itself at every crossing.",
-  "params": {
-   "d": 0.0135,
-   "seg": 440,
-   "cons": 1
-  },
-  "file": "v01-liggende-acht.html",
-  "module": "v01-liggende-acht.mjs",
-  "bytes": 29130
- },
- {
-  "id": "v02-knoop",
-  "pencils": true,
-  "title": "Knoop",
-  "nl": "Knoop",
-  "T": 16,
-  "still": 0.51,
-  "start": 0.01,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "x = (R + r cos qt) cos pt,  y = (R + r cos qt) sin pt,  z = r sin qt  (torus knot T(p,q); the trefoil is T(2,3))",
-  "label": "A torus knot drawn as a ribbon of three pencil lines turns slowly in space and melts from the trefoil into five-crossing and larger knots, with every crossing cut so the nearer strand passes over.",
-  "params": {
-   "pitch": 0.3,
-   "r": 0.5,
-   "spacing": 0.0125,
-   "gap": 0.0045,
-   "twist": 0.3,
-   "seg": 520
-  },
-  "file": "v02-knoop.html",
-  "module": "v02-knoop.mjs",
-  "bytes": 27792
- },
- {
-  "id": "v04-vlecht",
-  "pencils": true,
-  "title": "Vlecht",
-  "nl": "Vlecht",
-  "T": 16,
-  "still": 0.2,
-  "start": 0.1,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "strand k: angle t, radius R + r sin(m(t + 2πk/n) + φ), n strands; over where dρ/dt is larger",
-  "label": "Strands in coloured pencil plait themselves round a ring; the waves drift between two numbers of humps, so the weave keeps changing its pattern while every crossing is cut with the nearer strand over.",
-  "params": {
-   "n": 0,
-   "r": 0.3,
-   "spacing": 0.0105,
-   "gap": 0.0075,
-   "seg": 400
-  },
-  "file": "v04-vlecht.html",
-  "module": "v04-vlecht.mjs",
-  "bytes": 24887
- },
- {
   "id": "v05-roos",
   "pencils": true,
   "title": "Roos",
@@ -372,5 +293,27 @@
   "file": "v05-roos.html",
   "module": "v05-roos.mjs",
   "bytes": 20597
+ },
+ {
+  "id": "v07-droste",
+  "title": "Droste",
+  "nl": "Spiraal in zichzelf",
+  "T": 24,
+  "still": 0.3,
+  "start": 0.25,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "z = exp(w), w = G (u1 + rho u2), G = 2 pi i / (n1 + n2 rho); the cube pattern is periodic in u, shifted by tau (k1,k2), tau = t/T, so tau = 1 is the identity",
+  "label": "A field of pencil-hatched cubes in three tones, wound into a logarithmic spiral that contains a smaller twisted copy of itself and zooms endlessly inward, after the Droste effect and Escher's Print Gallery.",
+  "params": {
+   "arms": 0,
+   "drift": 1
+  },
+  "file": "v07-droste.html",
+  "module": "v07-droste.mjs",
+  "bytes": 24477
  }
 ]
