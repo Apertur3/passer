@@ -141,26 +141,25 @@
  },
  {
   "id": "m02-clifford",
-  "title": "Strange attractors",
+  "title": "Thomas attractor",
   "T": 12,
   "still": 0.1,
-  "start": 0.25,
+  "start": 0.05,
   "aspects": [
    "4:5",
    "16:9",
    "1:1"
   ],
-  "math": "Aizawa: dx/dt = (z - b) x - d y, dy/dt = d x + (z - b) y, dz/dt = c + a z - z^3/3 - (x^2 + y^2)(1 + e z) + f z x^3;  Thomas: dx/dt = sin y - b x (cyclic);  Halvorsen: dx/dt = -a x - 4 y - 4 z - y^2 (cyclic)",
-  "label": "A swarm of particles gliding along a strange attractor, each with a short comet trail; the flow slowly changes its parameters and every few epochs the swarm melts into a different attractor.",
+  "math": "dx/dt = sin y - b x,  dy/dt = sin z - b y,  dz/dt = sin x - b z;  b drifts between 0.1846 and 0.1878",
+  "label": "Thousands of hairline filaments flowing along one Thomas strange attractor at a steady, gentle speed, while the damping parameter b drifts slowly so the scroll folds into new shapes inside itself.",
   "params": {
-   "n": 3200,
-   "trail": 3,
-   "epoch": 20,
-   "fade": 4.5
+   "n": 2400,
+   "epoch": 5,
+   "fade": 3.5
   },
   "file": "m02-clifford.html",
   "module": "m02-clifford.mjs",
-  "bytes": 28143
+  "bytes": 28308
  },
  {
   "id": "m04-chladni",
@@ -354,14 +353,37 @@
    "1:1"
   ],
   "math": "cell (a,b) = projection of cube (x,y,z) with a = x - z, b = y - z; flights step (0,-1), (-1,0), (0,1), (1,0); the cells close, the depths x+y+z (the paint order) do not",
-  "label": "A square ring of isometric cubes drawn as a pencil staircase in three tones: four flights, each rising into the next, so the stairs climb for ever; a light sweep and four small marks circle round it.",
+  "label": "A square ring of isometric cubes drawn as a pencil staircase in three tones: four flights, each rising into the next, so the stairs climb for ever; a repeating light, mid, dark, mid pattern and four small marks run round it one way for ever.",
   "params": {
-   "n": 4,
-   "pitch": 0.0078,
-   "col": 1
+   "n": 5,
+   "pitch": 0.0078
   },
   "file": "v09-trap.html",
   "module": "v09-trap.mjs",
-  "bytes": 24598
+  "bytes": 24483
+ },
+ {
+  "id": "v10-driehoek",
+  "pencils": true,
+  "title": "Onmogelijke driehoek",
+  "nl": "Onmogelijke driehoek",
+  "T": 16,
+  "still": 0.2,
+  "start": 0.1,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "cells (0,0) -> (n,0) -> (n,n) -> (0,0) with (a,b) = (x - z, y - z): rows along x, y and z close in the picture, not in space; the paint order x + y + z has to break once",
+  "label": "The impossible triangle drawn as a pencil tiling of cubes in three tones; its hole holds a smaller turned copy of itself, and so on without end, while the picture zooms in for ever and a light sweep circles each level.",
+  "params": {
+   "n": 7,
+   "s": 0.45,
+   "a": 0
+  },
+  "file": "v10-driehoek.html",
+  "module": "v10-driehoek.mjs",
+  "bytes": 24574
  }
 ]
