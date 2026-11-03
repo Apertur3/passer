@@ -141,7 +141,7 @@
  },
  {
   "id": "m02-clifford",
-  "title": "Aizawa attractor",
+  "title": "Strange attractors",
   "T": 12,
   "still": 0.1,
   "start": 0.25,
@@ -150,15 +150,17 @@
    "16:9",
    "1:1"
   ],
-  "math": "dx/dt = (z - b) x - d y,  dy/dt = d x + (z - b) y,  dz/dt = c + a z - z^3/3 - (x^2 + y^2)(1 + e z) + f z x^3;  a = 0.95, b = 0.7, c = 0.6, d = 3.5, e = 0.25, f = 0.1",
-  "label": "A swarm of particles gliding along the Aizawa strange attractor, each with a short comet trail, seen from a slowly turning viewpoint; the density of the swarm draws the folded filigree of the flow.",
+  "math": "Aizawa: dx/dt = (z - b) x - d y, dy/dt = d x + (z - b) y, dz/dt = c + a z - z^3/3 - (x^2 + y^2)(1 + e z) + f z x^3;  Thomas: dx/dt = sin y - b x (cyclic);  Halvorsen: dx/dt = -a x - 4 y - 4 z - y^2 (cyclic)",
+  "label": "A swarm of particles gliding along a strange attractor, each with a short comet trail; the flow slowly changes its parameters and every few epochs the swarm melts into a different attractor.",
   "params": {
    "n": 3200,
-   "trail": 3
+   "trail": 3,
+   "epoch": 20,
+   "fade": 4.5
   },
   "file": "m02-clifford.html",
   "module": "m02-clifford.mjs",
-  "bytes": 24131
+  "bytes": 28143
  },
  {
   "id": "m04-chladni",
@@ -273,7 +275,6 @@
  },
  {
   "id": "v05-roos",
-  "pencils": true,
   "title": "Roos",
   "nl": "Roos",
   "T": 16,
@@ -284,15 +285,15 @@
    "16:9",
    "1:1"
   ],
-  "math": "r = cos(k t), t in [0, 4 pi), k = p/q in {5/2, 4}, blended in polar form r = (1-L) r_a + L r_b; copy j: scale 1 - j h, turn j d, petal exponent 1 + j/20",
-  "label": "One rose r = cos(kt) drawn as twelve nested pencil copies that fan out like a shaded lotus, while k slides between rational values.",
+  "math": "r = cos(k t), t in [0, 4 pi), k = p/q in {5/2, 4}, blended in polar form r = (1-L) r_a + L r_b; copy j: scale 1 - 0.92 j/N, turn j d, petal exponent 1 + 0.9 j/N",
+  "label": "One rose r = cos(kt) copied about forty times, each copy smaller, turned a little further and with slimmer petals, so the hairlines build a translucent lotus while k slides between rational values.",
   "params": {
-   "copies": 12,
-   "size": 0.42
+   "copies": 44,
+   "pts": 360
   },
   "file": "v05-roos.html",
   "module": "v05-roos.mjs",
-  "bytes": 20597
+  "bytes": 20669
  },
  {
   "id": "v07-droste",
@@ -314,6 +315,53 @@
   },
   "file": "v07-droste.html",
   "module": "v07-droste.mjs",
-  "bytes": 24477
+  "bytes": 25056
+ },
+ {
+  "id": "v08-kubus",
+  "pencils": true,
+  "title": "Kubus",
+  "nl": "Kubusstapeling",
+  "T": 16,
+  "still": 0.5,
+  "start": 0.3,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "h(i,j) in 0..n, h(i,j) >= h(i+1,j), h(i,j) >= h(i,j+1); the hexagon n x n x n is tiled by 3n^2 rhombi; a flip of three rhombi adds or removes one cube",
+  "label": "An isometric stack of cubes in a corner, drawn as a pencil tiling of rhombi in three tones; cubes are added and removed one at a time so the heap grows, collapses and builds towers and canyons.",
+  "params": {
+   "n": 4,
+   "pitch": 0.0078
+  },
+  "file": "v08-kubus.html",
+  "module": "v08-kubus.mjs",
+  "bytes": 29927
+ },
+ {
+  "id": "v09-trap",
+  "pencils": true,
+  "title": "Trap",
+  "nl": "Trap",
+  "T": 16,
+  "still": 0.3,
+  "start": 0.2,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "cell (a,b) = projection of cube (x,y,z) with a = x - z, b = y - z; flights step (0,-1), (-1,0), (0,1), (1,0); the cells close, the depths x+y+z (the paint order) do not",
+  "label": "A square ring of isometric cubes drawn as a pencil staircase in three tones: four flights, each rising into the next, so the stairs climb for ever; a light sweep and four small marks circle round it.",
+  "params": {
+   "n": 4,
+   "pitch": 0.0078,
+   "col": 1
+  },
+  "file": "v09-trap.html",
+  "module": "v09-trap.mjs",
+  "bytes": 24598
  }
 ]

@@ -271,25 +271,35 @@ function draw(ctx, { seed, g }) {
   let k1 = 0, k2 = 0, best = 1e9; { const dn0 = (n1 + n2 / 2) ** 2 + (n2 * H3) ** 2, a = TAU * n2 * H3 / dn0, b = TAU * (n1 + n2 / 2) / dn0;
     for (let i = -40; i <= 40; i++) for (let j = -40; j <= 40; j++) { const re = a * i + (a / 2 - b * H3) * j, im = b * i + (b / 2 + a * H3) * j, e = (re - 4.8) ** 2 + (im - 2.2) ** 2; if (e < best) { best = e; k1 = i; k2 = j; } } }
   const tau = g.p, s1 = tau * k1, s2 = tau * k2; // shift in lattice coordinates; tau = 1 is a lattice vector, so frame(T) = frame(0)
-  const Gm = Math.hypot(Gr, Gi), reLo = Math.log(3.5 / S / Gm), reHi = Math.log(R + Gm), det = Gr * Hi - Gi * Hr;
+  const Gm = Math.hypot(Gr, Gi), reLo = Math.log(5 / S / Gm), reHi = Math.log(R + Gm), det = Gr * Hi - Gi * Hr;
   // bounding box of the lattice cells whose centres have Re w in [reLo, reHi] and Im w in [0, 2 pi): preimage of that rectangle
   let pa = 1e9, pb = -1e9, qa = 1e9, qb = -1e9;
   for (const [x, y] of [[reLo, 0], [reHi, 0], [reLo, TAU], [reHi, TAU]]) { const u = (x * Hi - y * Hr) / det, v = (Gr * y - Gi * x) / det; pa = Math.min(pa, u); pb = Math.max(pb, u); qa = Math.min(qa, v); qb = Math.max(qb, v); }
   const NB = 4, mk = () => Array.from({ length: NB }, () => new Path2D()), PATH = [mk(), mk(), mk(), mk()]; // outline, light, mid, dark
-  const add = (path, wr, wi, vr, vi, rpx) => { // straight segment in w, subdivided so the image keeps under about 0.25 px of sagitta
-    const n = Math.max(1, Math.ceil(Math.hypot(vr - wr, vi - wi) / Math.sqrt(2 / rpx))); let e = Math.exp(wr);
-    path.moveTo(e * Math.cos(wi), e * Math.sin(wi));
-    for (let i = 1; i <= n; i++) { const x = wr + (vr - wr) * i / n, y = wi + (vi - wi) * i / n; e = Math.exp(x); path.lineTo(e * Math.cos(y), e * Math.sin(y)); }
+  const R2 = R * R, add = (path, wr, wi, vr, vi, rpx) => { // straight segment in w, subdivided to about 0.6 px of sagitta, cut exactly at the rim circle (no clip(): it costs 5 ms)
+    const n = Math.max(1, Math.ceil(Math.hypot(vr - wr, vi - wi) / Math.sqrt(4.8 / rpx)));
+    let px = 0, py = 0, pin = false, on = false;
+    for (let i = 0; i <= n; i++) {
+      const e = Math.exp(wr + (vr - wr) * i / n), y = wi + (vi - wi) * i / n, x = e * Math.cos(y), yy = e * Math.sin(y), In = x * x + yy * yy <= R2;
+      if (i) {
+        if (pin && In) { if (!on) path.moveTo(px, py); path.lineTo(x, yy); on = true; }
+        else if (pin || In) { // crossing: solve |p + t d| = R
+          const dx = x - px, dy = yy - py, A = dx * dx + dy * dy, B = px * dx + py * dy, sq = Math.sqrt(Math.max(0, B * B - A * (px * px + py * py - R2))), t = pin ? (-B + sq) / A : (-B - sq) / A, ix = px + t * dx, iy = py + t * dy;
+          if (pin) { if (!on) path.moveTo(px, py); path.lineTo(ix, iy); on = false; } else { path.moveTo(ix, iy); path.lineTo(x, yy); on = true; }
+        } else on = false;
+      }
+      px = x; py = yy; pin = In;
+    }
   };
   const bucket = a => Math.min(NB - 1, Math.max(0, Math.ceil(a * NB) - 1));
   for (let p = Math.floor(pa - s1) - 1; p <= Math.ceil(pb - s1) + 1; p++) for (let q = Math.floor(qa - s2) - 1; q <= Math.ceil(qb - s2) + 1; q++) {
     const u1 = p + s1, u2 = q + s2, cr = Gr * u1 + Hr * u2, ci = Gi * u1 + Hi * u2;
     if (cr < reLo || cr > reHi || ci < 0 || ci >= TAU) continue;
     const rc = Math.exp(cr), side = Gm / Math.sqrt(3) * rc * S; // rhombus side on screen, px
-    if (rc - Gm * rc * 0.8 > R || side < 4) continue;
-    const rpx = rc * S * 1.5;
+    if (rc - Gm * rc * 0.8 > R || side < 6) continue;
+    const rpx = rc * S * 1.2;
     const wp = (a, b) => [cr + Gr * a + Hr * b, ci + Gi * a + Hi * b];
-    const oa = sm((side - 4) / 8);
+    const oa = sm((side - 6) / 10);
     if (oa > 0.04) for (const [A, B] of EDGES) { const a = wp(A[0], A[1]), b = wp(B[0], B[1]); add(PATH[0][bucket(oa)], a[0], a[1], b[0], b[1], rpx); }
     for (let f = 0; f < 3; f++) {
       const [C, A, D] = FACES[f], N = NL[f], tn = 1 + f, hp = side * H3 / N;
@@ -300,10 +310,8 @@ function draw(ctx, { seed, g }) {
       }
     }
   }
-  ctx.save(); ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.clip();
-  const sty = [['fine', 0.9, g.c.ink], ['hair', 0.55, g.c.ink], ['hair', 0.8, g.c.ink], ['fine', 0.8, g.c.ink]];
+    const sty = [['fine', 0.9, g.c.ink], ['hair', 0.55, g.c.ink], ['hair', 0.8, g.c.ink], ['fine', 0.8, g.c.ink]];
   for (let k = 0; k < 4; k++) for (let b = 0; b < NB; b++) { g.pen(ctx, sty[k][0], sty[k][1] * (b + 1) / NB, sty[k][2]); ctx.stroke(PATH[k][b]); }
-  ctx.restore();
   g.pen(ctx, 'fine', 1, g.c.ink); ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();
 }
 
