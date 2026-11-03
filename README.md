@@ -2,7 +2,14 @@
 
 Animated mathematical drawings in plain Canvas 2D: hairlines on grey paper, in the manner of early plotter art. Every piece is one rule, a few lines of mathematics, drawn live in the browser.
 
-![Nine of the pieces: pegs and string, tesseract, Schotter drift, ribbon sheaf, roulette rosette, harmonograph, hyperbolic tiling, Penrose drift, Droste spiral](docs/preview.jpg)
+<p align="center">
+  <img src="docs/loop-droste.gif" width="24%" alt="The Droste spiral, looping">
+  <img src="docs/loop-ribbon-sheaf.gif" width="24%" alt="The ribbon sheaf, looping">
+  <img src="docs/loop-roulette.gif" width="24%" alt="The roulette rosette, looping">
+  <img src="docs/loop-tesseract.gif" width="24%" alt="The tesseract, looping">
+</p>
+
+<sub>The Droste spiral, ribbon sheaf, roulette rosette and tesseract as seamless loops, played two to three times faster than the real thing. A README cannot run JavaScript, so the live pieces are in [the article](https://notes.martijnhermans.nl/generative-abstract-art/).</sub>
 
 *Passer* is the Dutch word for a drawing compass.
 
@@ -14,6 +21,8 @@ Animated mathematical drawings in plain Canvas 2D: hairlines on grey paper, in t
 How these were made, and what a model on a home server could do with them, is written up in [the article](https://notes.martijnhermans.nl/generative-abstract-art/), where the pieces run live.
 
 ## The pieces
+
+![Nine of the pieces: pegs and string, tesseract, Schotter drift, ribbon sheaf, roulette rosette, harmonograph, hyperbolic tiling, Penrose drift, Droste spiral](docs/preview.jpg)
 
 | Piece | File | The rule |
 |---|---|---|
