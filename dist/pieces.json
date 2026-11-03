@@ -1,0 +1,27 @@
+[
+ {
+  "id": "f01-schotter",
+  "title": "Schotter drift",
+  "T": 30,
+  "still": 0.35,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "label": "A grid of squares, perfectly ordered at the top, tilting and drifting further apart row by row toward the bottom.",
+  "params": {
+   "rows": 24,
+   "cols": 16,
+   "rowsWide": 15,
+   "decay": 1.5,
+   "maxAngle": 0.5,
+   "maxShift": 0.5,
+   "sway": 0.05,
+   "gap": 0.14
+  },
+  "file": "f01-schotter.html",
+  "module": "f01-schotter.mjs",
+  "bytes": 16123
+ }
+]

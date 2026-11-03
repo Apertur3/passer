@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Style Spec Summary</title>
+<style>
+  :root {
+    --paper: #E4E2DD; --ink: #1B1A18; --tint-1: #9E9C98; --tint-2: #CCCAC5;
+    --sheet: #EDEBE7; --rule: #CFCDC8;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 15px/1.45 ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  main { max-width: 880px; margin: 0 auto; padding: 28px 16px 40px; }
+  .kicker { font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em;
+    text-transform: uppercase; color: #5E5C58; margin: 0 0 10px; }
+  h1 { font-size: 26px; line-height: 1.15; letter-spacing: -.01em; margin: 0 0 12px; font-weight: 600; }
+  h2 { font: 600 11px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em;
+    text-transform: uppercase; margin: 26px 0 10px; color: #5E5C58; }
+  p { margin: 0 0 10px; }
+  .tldr { font-size: 16px; max-width: 64ch; }
+  .embed { background: var(--sheet); border: 1px solid var(--rule); padding: 10px 12px; font-size: 14px; }
+  .embed b { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px 7px 0; border-bottom: 1px solid var(--rule); }
+  th { font: 600 11px/1.2 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .06em;
+    text-transform: uppercase; color: #5E5C58; }
+  td.id { font-family: ui-monospace, "SF Mono", Menlo, monospace; white-space: nowrap; color: #5E5C58; }
+  td.name { font-weight: 600; white-space: nowrap; }
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .sw { border: 1px solid var(--rule); background: var(--sheet); }
+  .chip { height: 56px; }
+  .sw div.meta { padding: 6px 8px; font: 12px/1.35 ui-monospace, "SF Mono", Menlo, monospace; }
+  .sw .meta span { display: block; color: #5E5C58; }
+  ol { margin: 0; padding-left: 20px; }
+  li { margin: 0 0 8px; }
+  li b { font-weight: 600; }
+  .foot { margin-top: 24px; font-size: 12px; color: #5E5C58; }
+  @media (max-width: 560px) {
+    h1 { font-size: 22px; }
+    .swatches { grid-template-columns: repeat(2, 1fr); }
+    .hide-sm { display: none; }
+    td.name { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">Generative art · style spec · summary</p>
+  <h1>Plotter-tradition pieces: grey paper, black ink, slow loops</h1>
+  <p class="tldr">Every piece is one deterministic drawing function that renders as a poster, a hero background, a seamless loop video, an avatar or a live article embed. The look comes from the 1960s to 1980s computer-art tradition (Nees, Molnar, Morellet, Mohr, Nake, Csuri, Reas, plus Escher-style tilings): lines and dots only, static paper grain on every piece, no gradient blobs or glow. Motion is slow, loops exactly every 20 seconds by default, and always includes a rest.</p>
+
+  <p class="embed"><b>Article embeds:</b> one self-contained HTML file (iframe or inline script), sized to its column (700 px, 390 px phones), pauses offscreen, still frame for reduced motion, no network requests, under 30 KB, 3 ms per frame.</p>
+
+  <h2>First six to build (contact sheet v1)</h2>
+  <table>
+    <thead><tr><th>#</th><th>Family</th><th>What you see</th><th class="hide-sm">Lineage</th></tr></thead>
+    <tbody>
+      <tr><td class="id">F01</td><td class="name">Schotter drift</td><td>A grid of squares that loses its order row by row; the bottom rows sway</td><td class="hide-sm">Nees</td></tr>
+      <tr><td class="id">F03</td><td class="name">Trames moiré</td><td>Overlaid line or ring grids; tiny angle changes make large moiré flows</td><td class="hide-sm">Morellet</td></tr>
+      <tr><td class="id">F05</td><td class="name">Hairline flow</td><td>Thousands of thin streamlines combing around an empty disc</td><td class="hide-sm">Plotter flow fields</td></tr>
+      <tr><td class="id">F07</td><td class="name">Halftone sphere</td><td>A dotted sphere and its shadow; the light orbits slowly</td><td class="hide-sm">Print halftone</td></tr>
+      <tr><td class="id">F08</td><td class="name">Iso-bands</td><td>Zebra contour bands that split and merge</td><td class="hide-sm">Reaction-diffusion look</td></tr>
+      <tr><td class="id">F12</td><td class="name">Metamorphosis</td><td>Interlocking tiles that change from one motif to another across the width</td><td class="hide-sm">Escher, Csuri</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Tokens</h2>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#E4E2DD"></div><div class="meta">paper<span>#E4E2DD</span></div></div>
+    <div class="sw"><div class="chip" style="background:#1B1A18"></div><div class="meta">ink<span>#1B1A18</span></div></div>
+    <div class="sw"><div class="chip" style="background:#9E9C98"></div><div class="meta">tint-1<span>#9E9C98 · ink 35%</span></div></div>
+    <div class="sw"><div class="chip" style="background:#CCCAC5"></div><div class="meta">tint-2<span>#CCCAC5 · ink 12%</span></div></div>
+  </div>
+
+  <h2>Three calls you may want to change</h2>
+  <ol>
+    <li><b>Chrome torus, blurry blob and ink-blot tiles are left out.</b> They need photoreal shading or blur, which drifts toward the gradient look and needs WebGL. Say so if you want one back.</li>
+    <li><b>Grain is static, like paper.</b> The alternative is film-style grain that shifts every frame: more "crackle", but it shimmers.</li>
+    <li><b>Paper is a warm light grey (#E4E2DD).</b> The reference grid is a cooler grey; a cooler paper would be about #E6E6E4.</li>
+  </ol>
+
+  <p class="foot">Full spec: STYLE-SPEC.md (families, motion rules, engine contract, acceptance checks).</p>
+</main>
+</body>
+</html>

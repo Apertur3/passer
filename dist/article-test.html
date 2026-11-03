@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Embedding test</title>
+<style>
+body{margin:0;background:#f3f2ee;color:#141518;font:19px/1.6 Georgia,serif}
+article{max-width:700px;margin:0 auto;padding:0 20px 80px}
+h1{font:600 2rem/1.1 system-ui,sans-serif}
+iframe{display:block;width:100%;aspect-ratio:4/5;border:0}
+.fig{margin:2em 0}
+#log{position:fixed;right:8px;bottom:8px;background:#141518;color:#eae7e0;font:11px/1.4 ui-monospace,monospace;padding:8px;max-width:300px}
+</style>
+<article>
+<h1>Embedding test</h1>
+<p>A fake article column. The first figure is the piece's own file in an iframe, the second and third are inline mounts of the same module (two copies on one page, different seeds), and none of them may fetch anything beyond the files named here.</p>
+<div class="fig"><iframe id="ifr" src="f01-schotter.html?seed=7&theme=fieldnotes" title="Schotter drift, iframe"></iframe></div>
+<p>Scroll past a figure and its canvas stops drawing (see the log, bottom right). Scroll back and it resumes from the page clock, so the loop phase stays consistent.</p>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+<div class="fig" id="a"></div>
+<p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+<p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.</p>
+<div class="fig" id="b"></div>
+<p>Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.</p>
+</article>
+<div id="log"></div>
+<script type="module">
+import { mount } from './f01-schotter.mjs';
+const A = mount(document.getElementById('a'), { seed: 3, aspect: '4:5', theme: 'fieldnotes' });
+const B = mount(document.getElementById('b'), { seed: 11, aspect: '16:9', theme: 'fieldnotes' });
+const rep = () => {
+  const res = performance.getEntriesByType('resource').map(r => r.name.split('/').pop()).join(', ');
+  document.getElementById('log').textContent = `inline A: ${A.canvas.dataset.state}, ${A.frames} frames | inline B: ${B.canvas.dataset.state}, ${B.frames} frames | requests: ${res} | genart ns: ${typeof window.genart?.mount}`;
+};
+setInterval(rep, 500); rep();
+</script>

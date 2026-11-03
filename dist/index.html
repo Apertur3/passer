@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>genart contact sheet</title>
+<style>
+body{margin:0;font:14px/1.4 system-ui,sans-serif;background:#d9d7d2;color:#1B1A18}
+header{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;padding:12px 16px;border-bottom:1px solid #9E9C98}
+label{display:flex;gap:6px;align-items:center}
+main{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;padding:16px}
+figure{margin:0}figcaption{padding:4px 0;font-size:12px}
+iframe{display:block;width:100%;border:0}
+</style>
+<header><strong>genart</strong>
+<label>theme <select id="theme"><option>mono<option>fieldnotes<option>night</select></label>
+<label>aspect <select id="aspect"><option>4:5<option>16:9<option>1:1</select></label>
+<label>seed <input id="seed" value="1" size="8"></label>
+<label>t (s, blank = live) <input id="t" size="5"></label></header>
+<main id="m"></main>
+<script type="module">
+const pieces = await (await fetch('pieces.json')).json(), $ = id => document.getElementById(id), m = $('m');
+const figs = pieces.map(p => { const f = document.createElement('figure'); f.innerHTML = `<iframe title="${p.title}"></iframe><figcaption>${p.id}: ${p.title}</figcaption>`; m.append(f); return [p, f.firstChild]; });
+function go() {
+  const a = $('aspect').value;
+  m.style.gridTemplateColumns = a === '16:9' ? 'repeat(auto-fill,minmax(420px,1fr))' : '';
+  for (const [p, fr] of figs) {
+    const q = new URLSearchParams({ seed: $('seed').value, aspect: a, theme: $('theme').value }); if ($('t').value) q.set('t', $('t').value);
+    fr.style.aspectRatio = a.replace(':', '/'); fr.src = `${p.file}?${q}`;
+  }
+  document.body.style.background = { mono: '#d9d7d2', fieldnotes: '#d9d8d3', night: '#08090b' }[$('theme').value];
+}
+['theme', 'aspect', 'seed', 't'].forEach(i => $(i).addEventListener('change', go)); go();
+</script>
