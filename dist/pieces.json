@@ -319,24 +319,26 @@
  {
   "id": "v08-kubus",
   "pencils": true,
-  "title": "Kubus",
+  "title": "Kubus (origineel)",
   "nl": "Kubusstapeling",
-  "T": 64,
-  "still": 0.6,
-  "start": 0.1,
+  "T": 16,
+  "still": 0.5,
+  "start": 0.3,
   "aspects": [
    "4:5",
    "16:9",
    "1:1"
   ],
-  "math": "h(i,j) in 0..24, h(i,j) >= h(i+1,j), h(i,j) >= h(i,j+1); each visible face is a rhombus of the lozenge tiling; a flip of three rhombi adds one cube; hatching is dyadic, level l adds the lines at odd multiples of 2^-(l+1)",
-  "label": "A heap of isometric cubes drawn in pencil, three tones of hatching on the three face directions; cubes are only added, one at a time, and the view pulls back so the growing heap, with its terraces and towers, stays in frame.",
+  "math": "h(i,j) in 0..n, h(i,j) >= h(i+1,j), h(i,j) >= h(i,j+1); the hexagon n x n x n is tiled by 3n^2 rhombi; a flip of three rhombi adds or removes one cube",
+  "label": "An isometric stack of cubes in a corner, drawn as a pencil tiling of rhombi in three tones; cubes are added and removed one at a time so the heap grows, collapses and builds towers and canyons.",
   "params": {
+   "n": 4,
+   "pitch": 0.0078,
    "construction": 0
   },
   "file": "v08-kubus.html",
   "module": "v08-kubus.mjs",
-  "bytes": 28242
+  "bytes": 30004
  },
  {
   "id": "v10-driehoek",
@@ -360,5 +362,27 @@
   "file": "v10-driehoek.html",
   "module": "v10-driehoek.mjs",
   "bytes": 24431
+ },
+ {
+  "id": "v11-kubus-bouw",
+  "pencils": true,
+  "title": "Kubus (bouwt)",
+  "nl": "Kubusstapeling",
+  "T": 64,
+  "still": 0.6,
+  "start": 0.1,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "h(i,j) in 0..24, h(i,j) >= h(i+1,j), h(i,j) >= h(i,j+1); each visible face is a rhombus of the lozenge tiling; a flip of three rhombi adds one cube; hatching is dyadic, level l adds the lines at odd multiples of 2^-(l+1)",
+  "label": "A heap of isometric cubes drawn in pencil, three tones of hatching on the three face directions; cubes are only added, one at a time, and the view pulls back so the growing heap, with its terraces and towers, stays in frame.",
+  "params": {
+   "construction": 0
+  },
+  "file": "v11-kubus-bouw.html",
+  "module": "v11-kubus-bouw.mjs",
+  "bytes": 28273
  }
 ]
