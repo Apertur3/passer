@@ -263,9 +263,10 @@ const canAdd = (h, N, c) => { const i = (c / N) | 0, j = c % N; return h[c] < N 
 const canDel = (h, N, c) => { const i = (c / N) | 0, j = c % N; return h[c] > 0 && (i === N - 1 || h[c + N] < h[c]) && (j === N - 1 || h[c + 1] < h[c]); };
 // a random legal column that stays clear of the columns still in flight (so every frame is a tidy stack)
 const pick = (h, N, ok, recent, r) => {
-  const L = []; for (let c = 0; c < N * N; c++) if (ok(h, N, c)) L.push(c);
-  const free = L.filter(c => !recent.some(d => near(c, d, N))), A = free.length ? free : L;
-  return A.length ? A[(r() * A.length) | 0] : -1;
+  let L = []; for (let c = 0; c < N * N; c++) if (ok(h, N, c)) L.push(c);
+  const L0 = L.filter(c => !recent.includes(c)); if (L0.length) L = L0; // never the column of a cube still in flight
+  for (let k = recent.length; k >= 0; k--) { const rc = recent.slice(recent.length - k), free = L.filter(c => !rc.some(d => near(c, d, N))); if (free.length) return free[(r() * free.length) | 0]; } // if none is clear of all, drop the oldest flight (the nearest to landing) first
+  return L.length ? L[(r() * L.length) | 0] : -1;
 };
 const step = (h, c, add) => { h = h.slice(); h[c] += add ? 1 : -1; return h; };
 
@@ -278,7 +279,7 @@ function table(g, N, live) {
   if (live) { // endless Glauber-like walk; the target volume breathes slowly between a low and a tall heap
     tb.ensure = m => {
       while (tb.mv.length < m) {
-        const j = tb.mv.length, h = tb.H[j], V = h.reduce((a, b) => a + b, 0), r = g.rng('L' + j), rec = tb.mv.slice(-3).map(q => q.c);
+        const j = tb.mv.length, h = tb.H[j], V = h.reduce((a, b) => a + b, 0), r = g.rng('L' + j), rec = tb.mv.slice(-4).map(q => q.c);
         const Vt = N ** 3 * (0.4 + 0.2 * Math.sin(j * 0.108 - Math.PI / 2) + 0.05 * Math.sin(j * 0.0431));
         let add = r() < Math.min(0.94, Math.max(0.06, 0.5 + 0.5 * (Vt - V) / 5)), c = pick(h, N, add ? canAdd : canDel, rec, r);
         if (c < 0) { add = !add; c = pick(h, N, add ? canAdd : canDel, rec, r); }
@@ -309,7 +310,7 @@ function draw(ctx, { g }) {
   if (live) { m = Math.max(0, Math.floor((tau - OFF) / STEP)); while (sj(m) <= tau) m++; while (m > 0 && sj(m - 1) > tau) m--; tb.ensure(m + 1); }
   else m = Math.max(0, Math.min(2 * K, Math.floor((tau - OFF) / STEP) + 1));
   const fl = [];
-  for (let j = m - 3; j < m; j++) { // moves still in the air (the loop wraps: the last moves spill into the next period)
+  for (let j = m - 4; j < m; j++) { // moves still in the air (the loop wraps: the last moves spill into the next period)
     const jj = j < 0 ? (live ? -1 : j + 2 * K) : j; if (jj < 0) continue;
     const q = (tau - sj(jj) + (j < 0 && !live ? T : 0)) / DUR; if (q >= 0 && q < 1) fl.push({ ...tb.mv[jj], q });
   }

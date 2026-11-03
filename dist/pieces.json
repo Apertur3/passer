@@ -338,51 +338,6 @@
   },
   "file": "v08-kubus.html",
   "module": "v08-kubus.mjs",
-  "bytes": 30004
- },
- {
-  "id": "v10-driehoek",
-  "pencils": true,
-  "title": "Onmogelijke driehoek",
-  "nl": "Onmogelijke driehoek",
-  "T": 64,
-  "still": 0.2,
-  "start": 0.1,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "cells (0,0) -> (n,0) -> (n,n) -> (0,0) with (a,b) = (x - z, y - z): rows along x, y and z close in the picture, not in space; the paint order x + y + z has to break once",
-  "label": "The impossible triangle drawn as a pencil tiling of cubes in three tones; a wave of hatch density runs round the loop one way for ever, from bare to crosshatched, while the whole drawing turns slowly.",
-  "params": {
-   "n": 7,
-   "construction": 0
-  },
-  "file": "v10-driehoek.html",
-  "module": "v10-driehoek.mjs",
-  "bytes": 24431
- },
- {
-  "id": "v11-kubus-bouw",
-  "pencils": true,
-  "title": "Kubus (bouwt)",
-  "nl": "Kubusstapeling",
-  "T": 64,
-  "still": 0.6,
-  "start": 0.1,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "h(i,j) in 0..24, h(i,j) >= h(i+1,j), h(i,j) >= h(i,j+1); each visible face is a rhombus of the lozenge tiling; a flip of three rhombi adds one cube; hatching is dyadic, level l adds the lines at odd multiples of 2^-(l+1)",
-  "label": "A heap of isometric cubes drawn in pencil, three tones of hatching on the three face directions; cubes are only added, one at a time, and the view pulls back so the growing heap, with its terraces and towers, stays in frame.",
-  "params": {
-   "construction": 0
-  },
-  "file": "v11-kubus-bouw.html",
-  "module": "v11-kubus-bouw.mjs",
-  "bytes": 28273
+  "bytes": 30308
  }
 ]
