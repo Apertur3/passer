@@ -24,55 +24,6 @@
   "bytes": 23939
  },
  {
-  "id": "f02-ruled-disorder",
-  "title": "Ruled disorder",
-  "T": 12,
-  "still": 0.3,
-  "start": 0.27,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "label": "Bands of short strokes slide past one another, each band drifting between one strict direction and a mix of verticals and diagonals, while a travelling gap parts the strokes around a moving point.",
-  "params": {
-   "rows": 27,
-   "rowsWide": 15,
-   "bands": 5,
-   "decay": 0.32,
-   "len": 0.92,
-   "travel": 0.7,
-   "gap": 0.1,
-   "bold": 0.07
-  },
-  "file": "f02-ruled-disorder.html",
-  "module": "f02-ruled-disorder.mjs",
-  "bytes": 23496
- },
- {
-  "id": "f03-trames",
-  "title": "Trames moire",
-  "T": 12,
-  "still": 0.3,
-  "start": 0.27,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "label": "Two sets of fine concentric rings with slightly shifted centres overprint inside a disc; the interference pattern sweeps across as the two centres circle in opposite directions.",
-  "params": {
-   "pitch": 0.0078,
-   "offset": 0.1,
-   "skip": 0.1,
-   "ratio": 1,
-   "radius": 0.43
-  },
-  "file": "f03-trames.html",
-  "module": "f03-trames.mjs",
-  "bytes": 21326
- },
- {
   "id": "f04-tesseract",
   "title": "Tesseract",
   "T": 16,
@@ -93,33 +44,6 @@
   "file": "f04-tesseract.html",
   "module": "f04-tesseract.mjs",
   "bytes": 22254
- },
- {
-  "id": "f05-hairline-flow",
-  "title": "Hairline flow",
-  "T": 12,
-  "dprMax": 1,
-  "still": 0.3,
-  "start": 0.25,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "label": "Thousands of fine hairlines combed along a slowly drifting flow field that bends around an empty disc.",
-  "params": {
-   "lines": 2100,
-   "len": 0.075,
-   "scale": 2.4,
-   "void": 0.17,
-   "hug": 0.16,
-   "drift": 0.55,
-   "wave": 1.1,
-   "orbit": 0.14
-  },
-  "file": "f05-hairline-flow.html",
-  "module": "f05-hairline-flow.mjs",
-  "bytes": 25256
  },
  {
   "id": "f06-ribbon-sheaf",
@@ -143,55 +67,6 @@
   "file": "f06-ribbon-sheaf.html",
   "module": "f06-ribbon-sheaf.mjs",
   "bytes": 22262
- },
- {
-  "id": "f08-iso-bands",
-  "title": "Iso-bands",
-  "T": 16,
-  "still": 0.3,
-  "start": 0.25,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "label": "Evenly spaced contour lines of a slowly drifting warped field, splitting and merging like the bands of a topographic map.",
-  "params": {
-   "bands": 25,
-   "warp": 0.22,
-   "scale": 1.4,
-   "drift": 0.25,
-   "orbit": 0.05,
-   "cell": 0.0075
-  },
-  "file": "f08-iso-bands.html",
-  "module": "f08-iso-bands.mjs",
-  "bytes": 24426
- },
- {
-  "id": "f09-glyph-tiling",
-  "title": "Glyph tiling",
-  "T": 12,
-  "still": 0.3,
-  "start": 0.27,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "label": "A sheet of square tiles each holding quarter-curve ribbons of hairlines that meet across the edges, sliding slowly; different rules set the tile directions in different regions, the curves straighten into diamonds around a wandering point, and slow fronts half-turn some tiles.",
-  "params": {
-   "tile": 0.052,
-   "flip": 0.15,
-   "scale": 3.2,
-   "angle": 0.55,
-   "turn": 0.28,
-   "travel": 0.6,
-   "mark": 0.14
-  },
-  "file": "f09-glyph-tiling.html",
-  "module": "f09-glyph-tiling.mjs",
-  "bytes": 23633
  },
  {
   "id": "f10-pegs-string",
@@ -288,28 +163,6 @@
   "bytes": 24552
  },
  {
-  "id": "m03-epicycles",
-  "title": "Epicycles",
-  "T": 16,
-  "still": 0.5,
-  "start": 0.3,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "z(s) = Σ c_k e^(i k s), twelve integer k, |c_k| ~ 1/|k|^1.2",
-  "label": "A field of epicycle machines of many sizes: each chain of turning circles draws its own closed curve, and the circles slowly swell and fade so the curves keep changing.",
-  "params": {
-   "terms": 12,
-   "decay": 1.2,
-   "pts": 520
-  },
-  "file": "m03-epicycles.html",
-  "module": "m03-epicycles.mjs",
-  "bytes": 23362
- },
- {
   "id": "m04-chladni",
   "title": "Chladni figure",
   "T": 12,
@@ -330,26 +183,6 @@
   "file": "m04-chladni.html",
   "module": "m04-chladni.mjs",
   "bytes": 23847
- },
- {
-  "id": "m05-phyllotaxis",
-  "title": "Phyllotaxis",
-  "T": 12,
-  "still": 0.3,
-  "start": 0.2,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "r = c sqrt(n),  phi = n (137.5078 deg + delta),  delta wanders by a few hundredths of a degree",
-  "label": "One sunflower of halftone dots whose divergence angle drifts a hair around the golden angle, so the spiral arms sweep, merge and change count, with a faint echo of itself that makes a moire halo.",
-  "params": {
-   "na": 1300
-  },
-  "file": "m05-phyllotaxis.html",
-  "module": "m05-phyllotaxis.mjs",
-  "bytes": 21327
  },
  {
   "id": "m06-hyperbolic",
@@ -492,31 +325,6 @@
   "bytes": 27792
  },
  {
-  "id": "v03-ritme",
-  "pencils": true,
-  "title": "Ritme",
-  "nl": "Ritme",
-  "T": 16,
-  "still": 0.3,
-  "start": 0.3,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "x = t - a sin t, y = -a cos t; a = 0 line, a < 1 wave, a = 1 cusp, a > 1 loops (self-crossing at t = +-t*, t* = a sin t*); a grows by row from 0 to 1.8",
-  "label": "Rows of one curve, the trochoid, drawn as three-pencil ribbons: a straight line at the top turns into a wave, then a cusp, then loops that tighten row by row, and the whole sheet slowly breathes and flows.",
-  "params": {
-   "rows": 9,
-   "amax": 1.6,
-   "d": 0.0055,
-   "ppp": 56
-  },
-  "file": "v03-ritme.html",
-  "module": "v03-ritme.mjs",
-  "bytes": 23621
- },
- {
   "id": "v04-vlecht",
   "pencils": true,
   "title": "Vlecht",
@@ -564,28 +372,5 @@
   "file": "v05-roos.html",
   "module": "v05-roos.mjs",
   "bytes": 20597
- },
- {
-  "id": "v06-rhombenring",
-  "pencils": true,
-  "title": "Rhombenring",
-  "nl": "Rhombenring",
-  "T": 12,
-  "still": 0.4,
-  "start": 0.3,
-  "aspects": [
-   "4:5",
-   "16:9",
-   "1:1"
-  ],
-  "math": "tile(a,b) = s u_a + t u_b, u_k = (cos(pi k/n), sin(pi k/n)); ring = Z(2,...,2) minus a centred hole; tone = Lambert shade of the lifted facet E_a x E_b",
-  "label": "A ring of rhombi hatched in three pencil tones by tile orientation so it reads as a twisted band; the tones turn round it and hexagons of three tiles flip.",
-  "params": {
-   "n": 0,
-   "pitch": 0.009
-  },
-  "file": "v06-rhombenring.html",
-  "module": "v06-rhombenring.mjs",
-  "bytes": 30644
  }
 ]
