@@ -1,0 +1,375 @@
+// genart.js: shared helpers for every piece. Plain ES module, no dependencies.
+// Built into each piece's dist file by scripts/build.mjs (exports are stripped there).
+
+// ---- themes ---------------------------------------------------------------
+const THEMES = {
+  mono: { paper: '#E4E2DD', ink: '#1B1A18' },
+  fieldnotes: { paper: '#E9E8E3', ink: '#141518', accent: '#A8521F', cool: '#3F6688', third: '#3D8A6E' },
+  night: { paper: '#121316', ink: '#EAE7E0', accent: '#D98552', cool: '#8FB0CF', third: '#6CC0A0' },
+};
+const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => '#' + rgb(a).map((v, i) => Math.round(v + (rgb(b)[i] - v) * k).toString(16).padStart(2, '0')).join('');
+function theme(name) {
+  const t = THEMES[name] || THEMES.mono;
+  return { paper: t.paper, ink: t.ink, accent: t.accent || t.ink, cool: t.cool || t.ink, third: t.third || t.ink,
+    tint1: mix(t.paper, t.ink, 0.35), tint2: mix(t.paper, t.ink, 0.12) };
+}
+
+// ---- prng: sfc32 seeded through cyrb128 ------------------------------------
+function cyrb128(s) {
+  let a = 1779033703, b = 3144134277, c = 1013904242, d = 2773480762;
+  for (let i = 0, k; i < s.length; i++) {
+    k = s.charCodeAt(i);
+    a = b ^ Math.imul(a ^ k, 597399067); b = c ^ Math.imul(b ^ k, 2869860233);
+    c = d ^ Math.imul(c ^ k, 951274213); d = a ^ Math.imul(d ^ k, 2716044179);
+  }
+  a = Math.imul(c ^ (a >>> 18), 597399067); b = Math.imul(d ^ (b >>> 22), 2869860233);
+  c = Math.imul(a ^ (c >>> 17), 951274213); d = Math.imul(b ^ (d >>> 19), 2716044179);
+  return [(a ^ b ^ c ^ d) >>> 0, (b ^ a) >>> 0, (c ^ a) >>> 0, (d ^ a) >>> 0];
+}
+function sfc32(a, b, c, d) {
+  return () => {
+    a |= 0; b |= 0; c |= 0; d |= 0;
+    const t = (((a + b) | 0) + d) | 0;
+    d = (d + 1) | 0; a = b ^ (b >>> 9); b = (c + (c << 3)) | 0; c = (c << 21) | (c >>> 11); c = (c + t) | 0;
+    return (t >>> 0) / 4294967296;
+  };
+}
+function prng(seed) { const r = sfc32(...cyrb128(String(seed))); for (let i = 0; i < 12; i++) r(); return r; }
+
+// ---- noise: simplex 4D, loop noise ----------------------------------------
+const PERM = new Uint8Array(512), GRAD = [];
+{ const r = prng('genart-noise'), a = [...Array(256).keys()];
+  for (let i = 255; i > 0; i--) { const j = (r() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+  for (let i = 0; i < 512; i++) PERM[i] = a[i & 255];
+  for (let z = 0; z < 4; z++) for (const p of [-1, 1]) for (const q of [-1, 1]) for (const s of [-1, 1]) { const v = [p, q, s]; v.splice(z, 0, 0); GRAD.push(v); } }
+const F4 = (Math.sqrt(5) - 1) / 4, G4 = (5 - Math.sqrt(5)) / 20;
+function noise4(x, y, z, w) { // about [-1, 1]
+  const s = (x + y + z + w) * F4, c0 = [x, y, z, w].map(v => Math.floor(v + s)), t = (c0[0] + c0[1] + c0[2] + c0[3]) * G4;
+  const X = [x, y, z, w].map((v, i) => v - (c0[i] - t)), rk = [0, 0, 0, 0];
+  for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) X[a] > X[b] ? rk[a]++ : rk[b]++;
+  let n = 0;
+  for (let c = 0; c < 5; c++) {
+    const o = rk.map(v => (c && v >= 4 - c ? 1 : 0)), d = X.map((v, i) => v - o[i] + c * G4);
+    const u = 0.6 - d[0] * d[0] - d[1] * d[1] - d[2] * d[2] - d[3] * d[3];
+    if (u > 0) {
+      const P = (i) => PERM[i & 255], gv = GRAD[P(c0[0] + o[0] + P(c0[1] + o[1] + P(c0[2] + o[2] + P(c0[3] + o[3])))) & 31];
+      n += u * u * u * u * (gv[0] * d[0] + gv[1] * d[1] + gv[2] * d[2] + gv[3] * d[3]);
+    }
+  }
+  return 27 * n;
+}
+const loopNoise = (x, y, th, r) => noise4(x, y, r * Math.cos(th), r * Math.sin(th));
+
+// ---- easing: only these two are allowed ----------------------------------
+const cl = u => Math.min(1, Math.max(0, u));
+const ease = {
+  sine: u => 0.5 - 0.5 * Math.cos(Math.PI * cl(u)),
+  smoother: u => { u = cl(u); return u * u * u * (u * (u * 6 - 15) + 10); },
+  // tempo curve, no rests: a phase that runs between 0.5x and 1.5x of the average speed and never stops
+  rest: p => p + Math.sin(2 * Math.PI * p) / (4 * Math.PI),
+  // breathing amplitude 0..1 over one loop (cosine of the tempo-varied phase)
+  breath: p => 0.5 - 0.5 * Math.cos(2 * Math.PI * ease.rest(p)),
+};
+
+// ---- frame: unit transform, paper, line weights ---------------------------
+const LW = { hair: 0.0006, fine: 0.0012, line: 0.0025, bold: 0.006, mass: 0.02 };
+function frame(ctx, { w, h, seed = 1, theme: tn = 'mono', q = 1 }) {
+  const S = Math.min(w, h), aspect = Math.max(w, h) / S, c = theme(tn), m = aspect > 1.5 ? 0.06 : 0.08;
+  const hw = w / S / 2, hh = h / S / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = c.paper; ctx.fillRect(0, 0, w, h);
+  ctx.setTransform(S, 0, 0, S, w / 2, h / 2); ctx.lineCap = ctx.lineJoin = 'round';
+  const lw = n => Math.max(LW[n], 0.75 / S);
+  // g.q: quality factor in (0, 1]. 1 in tests, exports and ?t= frames; mount's governor lowers it on slow devices.
+  // Heavy pieces multiply their element counts (segments, particles, dots) by g.q, rounding up to at least a sensible minimum.
+  return { S, aspect, w, h, hw, hh, m, bx: hw - m, by: hh - m, c, seed, lw, q,
+    // pen: set stroke width (floored at 0.75 device px, alpha scaled to keep tone), alpha and colour
+    pen(ctx, n, a = 1, col = c.ink) { ctx.lineWidth = lw(n); ctx.globalAlpha = a * Math.min(1, LW[n] / lw(n)); ctx.strokeStyle = col; },
+    rng: salt => prng(seed + ':' + (salt || '')), noise4, ease };
+}
+
+// ---- paper: two static grain tiles + dust (spec: grain; baked under the marks for speed) ----
+const TILES = {}, GK = 2.6; // GK scales the spec alphas: soft-light on bright paper is weak, this lands at std 2 to 5
+function tile(n, seed, amp) {
+  const k = n + seed; if (TILES[k]) return TILES[k];
+  const cv = document.createElement('canvas'); cv.width = cv.height = n;
+  const x = cv.getContext('2d'), im = x.createImageData(n, n), r = prng('grain' + k);
+  for (let i = 0; i < n * n; i++) im.data.set([0, 0, 0, 255].fill(128 + (r() * 2 - 1) * amp, 0, 3), i * 4);
+  x.putImageData(im, 0, 0); return (TILES[k] = cv);
+}
+// The paper (fill, dust, grain) is static, so it is built once per (seed, size, theme) and blitted each frame.
+const PAPER = new Map();
+function paper(g) {
+  const k = [g.seed, g.w, g.h, g.c.paper].join('|');
+  if (PAPER.has(k)) return PAPER.get(k);
+  const cv = document.createElement('canvas'); cv.width = g.w; cv.height = g.h;
+  const ctx = cv.getContext('2d'), r = g.rng('dust'), n = (r() * 41) | 0;
+  ctx.fillStyle = g.c.paper; ctx.fillRect(0, 0, g.w, g.h); ctx.fillStyle = g.c.ink;
+  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.3 + 0.4 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0004 + 0.0008 * r()), 0, 7); ctx.fill(); }
+  const k0 = Math.max(1, g.S / 1000); ctx.globalCompositeOperation = 'soft-light';
+  [[241, 1, 0.10 * GK], [257, 3, 0.06 * GK]].forEach(([sz, m, a]) => {
+    const p = ctx.createPattern(tile(sz, g.seed, 127), 'repeat'); p.setTransform(new DOMMatrix().scale(k0 * m));
+    ctx.globalAlpha = a; ctx.fillStyle = p; ctx.fillRect(0, 0, g.w, g.h);
+  });
+  if (PAPER.size > 6) PAPER.delete(PAPER.keys().next().value);
+  PAPER.set(k, cv); return cv;
+}
+
+// ---- render: the one place that turns (piece, seed, t, size, theme) into pixels ---
+function render(piece, ctx, o) {
+  const g = setup(piece, ctx, o);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(paper(g), 0, 0); ctx.restore();
+  piece.draw(ctx, { seed: o.seed, t: o.t, w: o.w, h: o.h, g });
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+}
+// setup: the frame helper plus phase, noise and live-mode helpers (also used headless by scripts/motion.mjs)
+function setup(piece, ctx, o) {
+  const g = frame(ctx, o), T = piece.meta.T;
+  g.params = { ...piece.meta.params, ...o.params };
+  g.T = T; g.p = (((o.t / T) % 1) + 1) % 1; g.theta = 2 * Math.PI * g.p;
+  g.thetaR = 2 * Math.PI * ease.rest(g.p); // theta with varying tempo (0.5x..1.5x), never stops
+  // Live mode (mount default; exports, ?t= frames, tests and ?loop=1 stay in loop mode, where drift = 0 and everything closes at T):
+  //  g.live   true in live mode.
+  //  g.drift  unbounded slow time in seconds (page clock); 0 in loop mode. Use it for slow envelopes that should never recur.
+  //  g.voice(k) loop mode: k * theta (integer k >= 1, closes). Live: 2*pi*(t/T)*(k + eps_k) unwrapped, with small detunes so
+  //           voices slip against each other and the combination never repeats.
+  //  g.loop(x, y, r, th) loop noise; live: the sampling circle's centre wanders slowly through noise space, so fields never recur.
+  g.live = !!o.live; g.drift = g.live ? o.t : 0;
+  const EPS = [0, 0.0618, 0.1414, 0.0732, 0.0236, 0.1032, 0.0455, 0.0871];
+  g.voice = k => g.live ? 2 * Math.PI * (o.t / T) * (k + (EPS[k - 1] ?? ((k * 0.618034) % 1) * 0.1)) : k * g.theta;
+  const D = [0.37, 0.61, 0.43, 0.29].map(v => v * 0.03 * g.drift);
+  g.loop = (x, y, r, th = g.theta) => g.live ? noise4(x + D[0], y + D[1], r * Math.cos(th) + D[2], r * Math.sin(th) + D[3]) : loopNoise(x, y, th, r);
+  return g;
+}
+
+// ---- clock: rAF loop with pause and resume ------
+function clock(fn) {
+  let raf = 0;
+  const loop = ts => { raf = requestAnimationFrame(loop); fn(ts / 1000); };
+  return { start() { if (!raf) raf = requestAnimationFrame(loop); }, stop() { cancelAnimationFrame(raf); raf = 0; }, get running() { return !!raf; } };
+}
+
+// ---- mount: responsive, pauses offscreen, honours reduced motion -----------
+function mount(el, o) {
+  const { piece } = o, m = piece.meta, seed = o.seed ?? 1, tn = o.theme || 'mono';
+  const [aw, ah] = (o.aspect || m.aspects[0]).split(':').map(Number), ar = aw / ah;
+  const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+  cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', m.label);
+  cv.style.cssText = `display:block;border:0;background:${theme(tn).paper};` + (o.fit ? '' : `width:100%;aspect-ratio:${aw}/${ah}`);
+  el.appendChild(cv);
+  const inst = { canvas: cv, frames: 0, q: 1, qSteps: 0, drawMs: [], destroy }; // drawMs: cost of the last 600 live paints (draw+frame, CPU side)
+  const mql = matchMedia('(prefers-reduced-motion: reduce)'), reduced = () => (o.reduce ?? mql.matches);
+  let vis = true, lastT = 0, lastLive = false, sized = false, key = '';
+  const paint = (t, again, live) => { // static modes skip a repaint of an identical frame
+    const k = cv.width + 'x' + cv.height + ':' + t; if (!sized || (!again && k === key)) return; key = k; lastT = t; lastLive = live; render(piece, ctx, { seed, t, w: cv.width, h: cv.height, theme: tn, params: o.params, q: gov.q, live }); inst.frames++; };
+  // Quality governor (live clock only; never for exports or ?t= frames). Rolling mean over 30 frames of (a) the cost of
+  // draw+frame and (b) the rAF interval. Mean cost > 12 ms or interval > 22 ms: step g.q down one level of [1, .7, .5, .35].
+  // Mean cost < 6 ms and interval < 18 ms for 3 consecutive windows (90 frames): step back up one level.
+  const gov = { q: o.q ?? 1, target: o.q ?? 1, L: [1, 0.7, 0.5, 0.35], i: 0, n: 0, cost: 0, gap: 0, bad: 0, good: 0, last: 0, stepAt: 0 };
+  // Live clock ACCUMULATES: tAcc += clamp(dt, 0, 0.05) * speed, with dt from rAF timestamps and speed = inst.speed * meta.speed.
+  // Changing the speed never changes the phase (no jump), and a stall or a pause becomes a slight slowdown, never a visual jump.
+  // The live t (= tAcc, unbounded) starts at meta.start * T and feeds g.drift / g.voice.
+  inst.speed = o.speed ?? 1; let tAcc = (m.start ?? 0.25) * m.T, lastTs = 0;
+  // Quality governor (live clock only; never for exports or ?t= frames). Windows of 30 frames of (a) the cost of draw+frame and
+  // (b) the rAF interval. Down one level of [1, .7, .5, .35] after 2 consecutive overloaded windows, about 1 s (cost > 10 ms or interval > 22 ms);
+  // up after 3 consecutive good windows (cost < 5 ms and interval < 18 ms) and at least 5 s since the last step. g.q itself eases toward the
+  // target level (about 1 s), so element counts fade rather than pop.
+  const govern = (cost, now) => {
+    const gap = gov.last && now - gov.last < 100 ? now - gov.last : 0; gov.last = now;
+    gov.cost += cost; gov.gap += gap || 16;
+    if (o.q == null) gov.q += (gov.target - gov.q) * 0.06;
+    inst.q = gov.q;
+    if (++gov.n < 30) return;
+    const c = gov.cost / 30, d = gov.gap / 30; gov.n = gov.cost = gov.gap = 0;
+    const bad = c > 10 || d > 22, good = c < 5 && d < 18; gov.bad = bad ? gov.bad + 1 : 0; gov.good = good ? gov.good + 1 : 0;
+    if (gov.bad >= 2 && gov.i < 3 && now - gov.stepAt > 1500) { gov.i++; inst.qSteps++; gov.stepAt = now; gov.bad = 0; } else if (gov.good >= 3 && gov.i > 0 && now - gov.stepAt > 5000) { gov.i--; inst.qSteps++; gov.stepAt = now; gov.good = 0; }
+    gov.target = gov.L[gov.i];
+  };
+  const clk = clock(ts => {
+    const t0 = performance.now(); tAcc += Math.min(0.05, Math.max(0, lastTs ? ts - lastTs : 0)) * inst.speed * (m.speed ?? 1); lastTs = ts;
+    paint(tAcc, 1, !o.loop); const cost = performance.now() - t0; inst.drawMs.push(cost); if (inst.drawMs.length > 600) inst.drawMs.shift(); govern(cost, t0);
+  });
+  function update() {
+    if (o.t != null) { clk.stop(); paint(o.t); }
+    else if (reduced()) { clk.stop(); paint(m.still * m.T); }
+    else if (vis && !document.hidden) { if (!clk.running) lastTs = 0; clk.start(); } else clk.stop();
+    cv.dataset.state = clk.running ? 'running' : 'paused';
+  }
+  const ro = new ResizeObserver(([e]) => {
+    const { width, height } = e.contentRect; if (!width) return;
+    const cw = o.fit ? Math.min(width, height * ar) : width, ch = cw / ar;
+    if (o.fit) { cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; }
+    const liveMode = o.t == null && !reduced() && !o.loop, k = Math.min(devicePixelRatio || 1, liveMode ? (o.dprMax ?? m.dprMax ?? 2) : 2); // meta.dprMax: heavy pieces ask for DPR 1 in live mode
+    let pw = cw * k; if (pw * (pw / ar) > 2.5e6) pw = Math.sqrt(2.5e6 * ar);
+    const nw = Math.round(pw), nh = Math.round(pw / ar); if (cv.width === nw && cv.height === nh && sized) return; // no needless clear
+    cv.width = nw; cv.height = nh; sized = true; update(); if (lastT || !clk.running) paint(lastT, 0, lastLive); // repaint in the same task: no blank frame is ever composited
+  });
+  const io = new IntersectionObserver(es => { vis = es[es.length - 1].isIntersecting; update(); });
+  const onVis = () => update();
+  ro.observe(el); io.observe(cv); document.addEventListener('visibilitychange', onVis); mql.addEventListener('change', onVis);
+  function destroy() { clk.stop(); ro.disconnect(); io.disconnect(); document.removeEventListener('visibilitychange', onVis); mql.removeEventListener('change', onVis); cv.remove(); }
+  return inst;
+}
+
+// ---- exports ---------------------------------------------------------------
+function target(piece, o) {
+  const [aw, ah] = (o.aspect || piece.meta.aspects[0]).split(':').map(Number), [w, h] = String(o.size || 2000).split('x').map(Number);
+  return { w, h: h || Math.round(w * ah / aw) };
+}
+const canvasFor = (piece, o) => { const cv = document.createElement('canvas'); Object.assign(cv, target(piece, o)); return cv; };
+const opts = (piece, o, cv, t) => ({ seed: o.seed ?? 1, theme: o.theme || 'mono', params: o.params, w: cv.width, h: cv.height, t });
+const blobOf = (cv, type = 'image/png') => new Promise(r => cv.toBlob(r, type));
+function exportPNG(piece, o = {}) { // the reduced-motion frame, at full size
+  const cv = canvasFor(piece, o); render(piece, cv.getContext('2d'), opts(piece, o, cv, piece.meta.still * piece.meta.T)); return blobOf(cv);
+}
+async function exportWebm(piece, o = {}, fps = 30) { // one seamless loop, real-time capture
+  const cv = canvasFor(piece, o), ctx = cv.getContext('2d'), track = cv.captureStream(0).getVideoTracks()[0];
+  const rec = new MediaRecorder(new MediaStream([track]), { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 12e6 });
+  const parts = []; rec.ondataavailable = e => parts.push(e.data); rec.start();
+  for (let i = 0; i < piece.meta.T * fps; i++) { render(piece, ctx, opts(piece, o, cv, i / fps)); track.requestFrame(); await new Promise(r => setTimeout(r, 1000 / fps)); }
+  await new Promise(r => { rec.onstop = r; rec.stop(); }); return new Blob(parts, { type: 'video/webm' });
+}
+async function exportFrames(piece, o = {}, fps = 30) { // needs a user gesture for the folder picker
+  const dir = await showDirectoryPicker(), cv = canvasFor(piece, o), ctx = cv.getContext('2d');
+  for (let i = 0; i < piece.meta.T * fps; i++) {
+    render(piece, ctx, opts(piece, o, cv, i / fps));
+    const f = await (await dir.getFileHandle(`frame_${String(i).padStart(5, '0')}.png`, { create: true })).createWritable();
+    await f.write(await blobOf(cv)); await f.close();
+  }
+}
+function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e4); }
+
+// M06 Hyperbolic tiling: the regular tiling {p,q} of the Poincare disc, swimming under a Mobius shift.
+// One rule: reflect a regular p-gon across its own edges until the disc is full; every edge is a circle arc meeting the rim at a right angle,
+// and the whole tiling is moved by the disc automorphism z -> (z + a) / (1 + conj(a) z) while it turns one 2pi/p step per loop.
+const meta = {
+  id: 'm06-hyperbolic', title: 'Hyperbolic tiling', T: 16, still: 0.3, start: 0.25, aspects: ['4:5', '16:9', '1:1'],
+  math: '{p,q} tiling of the Poincare disc; geodesics are circle arcs orthogonal to |z|=1; z -> (z + a)/(1 + conj(a) z), a(theta) a closed orbit',
+  label: 'A regular tiling of the hyperbolic plane drawn in the Poincare disc: pentagons and heptagons shrink toward the rim while a moving Mobius shift makes the whole tiling swim like a fisheye.',
+  // p, q: Schlafli symbol (0 = chosen by seed among {3,8} {4,6}; q even keeps the checkerboard); shift: size of the Mobius orbit
+  params: { p: 0, q: 0, shift: 0.16 },
+};
+
+const SETS = [[3, 8], [4, 6], [3, 8]], DMAX = 6.1, NB = 4, MIN = 0.009; // MIN: smallest visible edge, in S (6 px at 700 px)
+const memo = {};
+// ---- the group: build once per {p,q}. Tiles are images of the base p-gon under isometries (Mobius matrix, or Mobius of conj z)
+function build(p, q) {
+  const k = p + ',' + q; if (memo[k]) return memo[k];
+  const cc = Math.cos(Math.PI / p) / Math.sin(Math.PI / p) * Math.cos(Math.PI / q) / Math.sin(Math.PI / q), Rh = Math.acosh(cc), r0 = Math.tanh(Rh / 2);
+  const d = (r0 * r0 + 1) / (2 * r0 * Math.cos(Math.PI / p)); // the base edge lies on the circle with centre d e^{i(2k+1)pi/p}, radius sqrt(d^2 - 1)
+  const mm = (A, B) => [A[0] * B[0] - A[1] * B[1] + A[2] * B[4] - A[3] * B[5], A[0] * B[1] + A[1] * B[0] + A[2] * B[5] + A[3] * B[4],
+    A[0] * B[2] - A[1] * B[3] + A[2] * B[6] - A[3] * B[7], A[0] * B[3] + A[1] * B[2] + A[2] * B[7] + A[3] * B[6],
+    A[4] * B[0] - A[5] * B[1] + A[6] * B[4] - A[7] * B[5], A[4] * B[1] + A[5] * B[0] + A[6] * B[5] + A[7] * B[4],
+    A[4] * B[2] - A[5] * B[3] + A[6] * B[6] - A[7] * B[7], A[4] * B[3] + A[5] * B[2] + A[6] * B[7] + A[7] * B[6]]; // 2x2 complex product, [ar ai br bi cr ci dr di]
+  const ap = (M, x, y) => { const nr = M[0] * x - M[1] * y + M[2], ni = M[0] * y + M[1] * x + M[3], dr = M[4] * x - M[5] * y + M[6], di = M[4] * y + M[5] * x + M[7], s = dr * dr + di * di; return [(nr * dr + ni * di) / s, (ni * dr - nr * di) / s]; };
+  const refl = []; // inversion in edge circle k: z -> (c w - 1)/(w - conj c), w = conj z
+  for (let j = 0; j < p; j++) { const a = (2 * j + 1) * Math.PI / p, cx = d * Math.cos(a), cy = d * Math.sin(a); refl.push([cx, cy, -1, 0, 1, 0, -cx, cy]); }
+  const tiles = [{ M: [1, 0, 0, 0, 0, 0, 1, 0], f: 0, par: 0 }], seen = new Map(), key = (x, y) => Math.round(x * 2e5) + ',' + Math.round(y * 2e5), lim = Math.tanh(DMAX / 2);
+  seen.set(key(0, 0), 0);
+  const img = (t, x, y) => ap(t.M, t.f ? x : x, t.f ? -y : y); // tile map: z -> M(z) or M(conj z)
+  for (let i = 0; i < tiles.length; i++) for (let j = 0; j < p; j++) {
+    const t = tiles[i], S = refl[j]; let M, f;
+    if (!t.f) { M = mm(t.M, S); f = 1; } else { M = mm(t.M, [S[0], -S[1], S[2], -S[3], S[4], -S[5], S[6], -S[7]]); f = 0; }
+    const c = ap(M, 0, 0); // centre of the neighbour: M(conj 0) = M(0) either way
+    if (Math.hypot(c[0], c[1]) > lim) continue; const kk = key(c[0], c[1]);
+    if (!seen.has(kk)) { seen.set(kk, tiles.length); tiles.push({ M, f, par: 1 - t.par }); }
+  }
+  const nT = tiles.length, vk = new Map(), V = [], E = [], ek = new Map(), tv = new Int32Array(nT * p), te = new Int32Array(nT * p), eT = [];
+  for (let i = 0; i < nT; i++) for (let j = 0; j < p; j++) {
+    const a = 2 * Math.PI * j / p, v = img(tiles[i], r0 * Math.cos(a), r0 * Math.sin(a)), kk = key(v[0], v[1]);
+    if (!vk.has(kk)) { vk.set(kk, V.length / 2); V.push(v[0], v[1]); } tv[i * p + j] = vk.get(kk);
+  }
+  for (let i = 0; i < nT; i++) for (let j = 0; j < p; j++) {
+    const a = tv[i * p + j], b = tv[i * p + (j + 1) % p], kk = Math.min(a, b) + ',' + Math.max(a, b);
+    if (!ek.has(kk)) { ek.set(kk, E.length / 2); E.push(a, b); eT.push([i]); } else eT[ek.get(kk)].push(i);
+    te[i * p + j] = ek.get(kk);
+  }
+  return (memo[k] = { p, q, Rh, r0, nT, nV: V.length / 2, V: new Float64Array(V), E: new Int32Array(E), tv, te, par: Uint8Array.from(tiles, t => t.par), M: tiles.map(t => t.M), f: Uint8Array.from(tiles, t => t.f), ap });
+}
+// ---- batched geodesic arcs: one path per alpha bucket. A geodesic through two disc points is the circle orthogonal to |z| = 1 through both.
+function Batch(cap) {
+  const f = new Float32Array(cap * 7), k = new Uint8Array(cap); let n = 0;
+  return {
+    get n() { return n; }, reset() { n = 0; },
+    add(ax, ay, bx, by, bk) { // store the arc A -> B as start, end and the tangent corner T used by arcTo; R = 0 means a straight chord
+      if (n >= cap) return; const o = n * 7, D = ax * by - ay * bx; f[o] = ax; f[o + 1] = ay; f[o + 2] = bx; f[o + 3] = by; k[n++] = bk;
+      if (Math.abs(D) < 1e-7) { f[o + 6] = 0; return; }
+      const sa = ax * ax + ay * ay + 1, sb = bx * bx + by * by + 1, cx = (sa * by - sb * ay) / (2 * D), cy = (sb * ax - sa * bx) / (2 * D), R2 = cx * cx + cy * cy - 1;
+      const mx = (ax + bx) / 2 - cx, my = (ay + by) / 2 - cy, m2 = mx * mx + my * my; if (R2 > 4e4 || m2 < 1e-14) { f[o + 6] = 0; return; }
+      f[o + 4] = cx + R2 * mx / m2; f[o + 5] = cy + R2 * my / m2; f[o + 6] = Math.sqrt(R2);
+    },
+    stroke(ctx, g, w, base, col, sc, rd) { // sc, rd: scale unit-disc coordinates by rd
+      for (let b = 0; b < NB; b++) {
+        ctx.beginPath(); let any = 0;
+        for (let i = 0; i < n; i++) if (k[i] === b) { any = 1; const o = i * 7;
+          ctx.moveTo(f[o] * rd, f[o + 1] * rd); if (f[o + 6]) ctx.arcTo(f[o + 4] * rd, f[o + 5] * rd, f[o + 2] * rd, f[o + 3] * rd, f[o + 6] * rd); ctx.lineTo(f[o + 2] * rd, f[o + 3] * rd); }
+        if (any) { g.pen(ctx, w, base * (b + 1) / NB, col); ctx.stroke(); }
+      }
+    },
+  };
+}
+const bk = a => Math.min(NB - 1, Math.floor(a * NB)), sm = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+const EDGE = Batch(6000), HATCH = [Batch(9000), Batch(9000)];
+const SCR = { W: null, loc: null };
+let TX = 0, TY = 0; // result of ap2: the Mobius map M applied to x + iy, without allocating
+function ap2(M, x, y) { const nr = M[0] * x - M[1] * y + M[2], ni = M[0] * y + M[1] * x + M[3], dr = M[4] * x - M[5] * y + M[6], di = M[4] * y + M[5] * x + M[7], s = dr * dr + di * di; TX = (nr * dr + ni * di) / s; TY = (ni * dr - nr * di) / s; }
+
+function draw(ctx, { seed, g }) {
+  const P = g.params, r = g.rng('m06'), pick = SETS[Math.floor(r() * SETS.length)], p = P.p || pick[0], q = P.q || pick[1];
+  const D = build(p, q), { nV, V, E, nT, tv, par } = D, rd = Math.min(g.bx, g.by), TAU = 2 * Math.PI;
+  // ---- motion: a closed orbit a(theta) for the Mobius shift, and one 2pi/p step of rotation per loop
+  const v1 = g.voice(1), v2 = g.voice(2), v3 = g.voice(3), k = P.shift, wob = g.live ? 0.8 + 0.2 * Math.sin(g.drift * 0.05) : 1;
+  const ax = k * wob * (0.62 * Math.cos(v1) + 0.38 * Math.cos(-2 * v2 + 1.3)), ay = k * wob * (0.62 * Math.sin(v1) + 0.38 * Math.sin(-2 * v2 + 1.3));
+  const phi = g.voice(1) / p, cr = Math.cos(phi), sr = Math.sin(phi);
+  // full map z -> (e^{i phi} z + a)/(conj(a) e^{i phi} z + 1) as a matrix
+  const MM = [cr, sr, ax, ay, ax * cr + ay * sr, ax * sr - ay * cr, 1, 0];
+  const mmul = (A, B) => [A[0] * B[0] - A[1] * B[1] + A[2] * B[4] - A[3] * B[5], A[0] * B[1] + A[1] * B[0] + A[2] * B[5] + A[3] * B[4], A[0] * B[2] - A[1] * B[3] + A[2] * B[6] - A[3] * B[7], A[0] * B[3] + A[1] * B[2] + A[2] * B[7] + A[3] * B[6],
+    A[4] * B[0] - A[5] * B[1] + A[6] * B[4] - A[7] * B[5], A[4] * B[1] + A[5] * B[0] + A[6] * B[5] + A[7] * B[4], A[4] * B[2] - A[5] * B[3] + A[6] * B[6] - A[7] * B[7], A[4] * B[3] + A[5] * B[2] + A[6] * B[7] + A[7] * B[6]];
+  if (!SCR.W || SCR.W.length < nV * 2) SCR.W = new Float64Array(nV * 2);
+  const W = SCR.W;
+  for (let i = 0; i < nV; i++) { ap2(MM, V[i * 2], V[i * 2 + 1]); W[i * 2] = TX; W[i * 2 + 1] = TY; }
+  // ---- local pattern, identical in every tile: ripples of nested polygons that flow toward the centre; light tiles run half a step out of phase
+  const K = 6, rho = s => Math.tanh(s * D.Rh / 2), rip = v3 / TAU;
+  if (!SCR.loc) SCR.loc = [new Float64Array(K * p * 2), new Float64Array(K * p * 2)], SCR.lu = [new Float32Array(K), new Float32Array(K)];
+  for (let h = 0; h < 2; h++) for (let j = 0; j < K; j++) {
+    const u = (((j / K + rip + h * 0.5 / K) % 1) + 1) % 1, s = 1 - u, rr = rho(s), tw = (1 - s) * 0.35 * (TAU / p), L = SCR.loc[h]; SCR.lu[h][j] = Math.sin(Math.PI * u);
+    for (let m = 0; m < p; m++) { const a = TAU * m / p + tw; L[(j * p + m) * 2] = rr * Math.cos(a); L[(j * p + m) * 2 + 1] = rr * Math.sin(a); } }
+  EDGE.reset(); HATCH[0].reset(); HATCH[1].reset();
+  // ---- fills of the dark tiles (tint, one path)
+  const polyPath = (i, W2 = W) => { ctx.moveTo(W2[tv[i * p] * 2] * rd, W2[tv[i * p] * 2 + 1] * rd);
+    for (let m = 0; m < p; m++) { const a = tv[i * p + m], b = tv[i * p + (m + 1) % p]; arcAdd(ctx, W2[a * 2] * rd, W2[a * 2 + 1] * rd, W2[b * 2] * rd, W2[b * 2 + 1] * rd, rd); } };
+  const edgeLen = (i) => Math.hypot(W[tv[i * p] * 2] - W[tv[i * p + 1] * 2], W[tv[i * p] * 2 + 1] - W[tv[i * p + 1] * 2 + 1]) * rd; // in S
+  const vis = SCR.vis && SCR.vis.length === nT ? SCR.vis : (SCR.vis = new Float32Array(nT));
+  ctx.beginPath();
+  for (let i = 0; i < nT; i++) { const L0 = edgeLen(i); vis[i] = L0; if (par[i] === 1 && L0 > MIN * 0.8) { polyPath(i); } }
+  ctx.fillStyle = g.c.tint2; ctx.globalAlpha = 0.9; ctx.fill();
+  // ---- edges: each geodesic once, alpha by its length on screen
+  for (let e = 0; e < D.E.length / 2; e++) {
+    const a = E[e * 2], b = E[e * 2 + 1], ln = Math.hypot(W[a * 2] - W[b * 2], W[a * 2 + 1] - W[b * 2 + 1]) * rd, al = sm((ln - MIN) / (MIN * 2.2));
+    if (al > 0.06) EDGE.add(W[a * 2], W[a * 2 + 1], W[b * 2], W[b * 2 + 1], bk(al));
+  }
+  // ---- hatch: the local pattern carried into every tile by (shift . tile map)
+  for (let i = 0; i < nT; i++) {
+    const L0 = vis[i]; if (L0 < MIN * 2.2) continue;
+    const t = mmul(MM, D.M[i]), cj = D.f[i] ? -1 : 1, size = sm((L0 - MIN * 2) / (MIN * 5)), h = par[i], L = SCR.loc[h], lu = SCR.lu[h], base = size * (h ? 1 : 0.6);
+    for (let j = 0; j < K; j++) { const al = lu[j] * base; if (al < 0.08) continue;
+      const o = (j * p + p - 1) * 2; ap2(t, L[o], cj * L[o + 1]); let px = TX, py = TY;
+      for (let m = 0; m < p; m++) { ap2(t, L[(j * p + m) * 2], cj * L[(j * p + m) * 2 + 1]); HATCH[h].add(px, py, TX, TY, bk(al)); px = TX; py = TY; } }
+  }
+  ctx.globalAlpha = 1;
+  EDGE.stroke(ctx, g, 'fine', 0.95, g.c.ink, 1, rd); HATCH[1].stroke(ctx, g, 'hair', 1, g.c.ink, 1, rd); HATCH[0].stroke(ctx, g, 'hair', 1, g.c.cool, 1, rd); // the two colour classes are the two line systems
+  g.pen(ctx, 'line', 1, g.c.ink); ctx.beginPath(); ctx.arc(0, 0, rd, 0, TAU); ctx.stroke();
+}
+// append one geodesic arc A -> B (unit-disc points already scaled by rd) to the current path
+function arcAdd(ctx, ax, ay, bx, by, rd) {
+  const a = ax / rd, b = ay / rd, c = bx / rd, d = by / rd, D = a * d - b * c;
+  if (Math.abs(D) < 1e-7) return ctx.lineTo(bx, by);
+  const sa = a * a + b * b + 1, sb = c * c + d * d + 1, ox = (sa * d - sb * b) / (2 * D), oy = (sb * a - sa * c) / (2 * D), R2 = ox * ox + oy * oy - 1;
+  const mx = (a + c) / 2 - ox, my = (b + d) / 2 - oy, m2 = mx * mx + my * my; if (R2 > 4e4 || m2 < 1e-14) return ctx.lineTo(bx, by);
+  ctx.arcTo((ox + R2 * mx / m2) * rd, (oy + R2 * my / m2) * rd, bx, by, Math.sqrt(R2) * rd); ctx.lineTo(bx, by);
+}
+
+const mountPiece = (el, o) => mount(el, { piece: { meta, draw }, ...o });
+(window.genart ||= {}).mount ??= mountPiece;
+export { meta,draw,render,theme,exportPNG,exportWebm,exportFrames, mountPiece as mount };

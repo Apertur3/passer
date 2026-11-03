@@ -21,7 +21,7 @@
   },
   "file": "f01-schotter.html",
   "module": "f01-schotter.mjs",
-  "bytes": 23819
+  "bytes": 23880
  },
  {
   "id": "f02-ruled-disorder",
@@ -47,7 +47,7 @@
   },
   "file": "f02-ruled-disorder.html",
   "module": "f02-ruled-disorder.mjs",
-  "bytes": 23376
+  "bytes": 23437
  },
  {
   "id": "f03-trames",
@@ -70,7 +70,7 @@
   },
   "file": "f03-trames.html",
   "module": "f03-trames.mjs",
-  "bytes": 21206
+  "bytes": 21267
  },
  {
   "id": "f04-tesseract",
@@ -85,14 +85,14 @@
   ],
   "label": "A hypercube turning in four dimensions, projected to a fan of fine lines where only a seeded subset of its edges is drawn.",
   "params": {
-   "keep": 0.72,
+   "keep": 0.5,
    "copies": 12,
    "spread": 0.05,
    "depth": 6
   },
   "file": "f04-tesseract.html",
   "module": "f04-tesseract.mjs",
-  "bytes": 21524
+  "bytes": 22195
  },
  {
   "id": "f05-hairline-flow",
@@ -119,7 +119,7 @@
   },
   "file": "f05-hairline-flow.html",
   "module": "f05-hairline-flow.mjs",
-  "bytes": 25136
+  "bytes": 25197
  },
  {
   "id": "f06-ribbon-sheaf",
@@ -142,7 +142,7 @@
   },
   "file": "f06-ribbon-sheaf.html",
   "module": "f06-ribbon-sheaf.mjs",
-  "bytes": 22142
+  "bytes": 22203
  },
  {
   "id": "f08-iso-bands",
@@ -166,7 +166,7 @@
   },
   "file": "f08-iso-bands.html",
   "module": "f08-iso-bands.mjs",
-  "bytes": 24306
+  "bytes": 24367
  },
  {
   "id": "f09-glyph-tiling",
@@ -191,30 +191,30 @@
   },
   "file": "f09-glyph-tiling.html",
   "module": "f09-glyph-tiling.mjs",
-  "bytes": 23513
+  "bytes": 23574
  },
  {
   "id": "f10-pegs-string",
   "title": "Pegs and string",
-  "T": 12,
-  "start": 0.3,
-  "still": 0.5,
+  "T": 16,
+  "start": 0.25,
+  "still": 0.3,
   "aspects": [
    "4:5",
    "16:9",
    "1:1"
   ],
-  "label": "A single thin string wound around a lattice of pegs, drawn as straight tangents and small wraps, that keeps circling loose around its pegs in a wave from left to right.",
+  "label": "One long thin string wrapped peg to peg around the border of a lattice of pegs, drawing curved envelopes that slowly ripple as its far ends slide along the ring.",
   "params": {
-   "across": 13,
-   "cover": 0.9,
-   "reach": 7,
-   "wrap": 0.0038,
-   "hooks": 0
+   "across": 25,
+   "ring": 120,
+   "mult": 3,
+   "spread": 0.2,
+   "wrap": 0.0028
   },
   "file": "f10-pegs-string.html",
   "module": "f10-pegs-string.mjs",
-  "bytes": 24080
+  "bytes": 23402
  },
  {
   "id": "f12-metamorphosis",
@@ -239,7 +239,7 @@
   },
   "file": "f12-metamorphosis.html",
   "module": "f12-metamorphosis.mjs",
-  "bytes": 23480
+  "bytes": 23541
  },
  {
   "id": "m01-harmonograph",
@@ -252,15 +252,191 @@
    "16:9",
    "1:1"
   ],
-  "math": "x(t) = Σ A_i sin(f_i t + φ_i) e^(-d_i t), y(t) likewise; f_i near integer ratios, e.g. 3 : 2 + 0.02",
+  "math": "x(t) = Σ A_i sin(f_i t + φ_i) e^(-d_i t), y(t) likewise; f_i = a_i N + e_i integers (e.g. 3 : 2 plus a small detune), one closed period, amplitudes modulated",
   "label": "A pen traced by damped pendulums: near-integer frequency ratios make a decaying spiral whose ink gathers where the path retraces.",
   "params": {
-   "cycles": 60,
-   "segs": 8000,
+   "segs": 9000,
    "alpha": 0.42
   },
   "file": "m01-harmonograph.html",
   "module": "m01-harmonograph.mjs",
-  "bytes": 21536
+  "bytes": 22015
+ },
+ {
+  "id": "m02-clifford",
+  "title": "Clifford attractor",
+  "T": 12,
+  "still": 0.1,
+  "start": 0.25,
+  "dprMax": 1,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "x' = sin(a y) + c cos(a x),  y' = sin(b x) + d cos(b y);  (a, b) walk a small circle",
+  "label": "A fixed lattice of points pushed through the Clifford map eight times lands on a folded filigree; the parameters walk a small circle so the cloud unfolds and refolds, with a second, smaller attractor in the cool colour.",
+  "params": {
+   "seeds": 8000,
+   "eps": 0.07,
+   "dwell": 50
+  },
+  "file": "m02-clifford.html",
+  "module": "m02-clifford.mjs",
+  "bytes": 25806
+ },
+ {
+  "id": "m03-epicycles",
+  "title": "Epicycles",
+  "T": 16,
+  "still": 0.5,
+  "start": 0.3,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "z(s) = Σ c_k e^(i k s), twelve integer k, |c_k| ~ 1/|k|^1.2",
+  "label": "Twelve circles turning on each other: the last point of the chain draws a closed curve, and the circles slowly grow and fade so the curve keeps changing.",
+  "params": {
+   "terms": 12,
+   "decay": 1.2,
+   "pts": 520
+  },
+  "file": "m03-epicycles.html",
+  "module": "m03-epicycles.mjs",
+  "bytes": 22760
+ },
+ {
+  "id": "m04-chladni",
+  "title": "Chladni figure",
+  "T": 12,
+  "still": 0.12,
+  "start": 0.3,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "u = cos t (cos n pi x cos m pi y - cos m pi x cos n pi y) + sin t (same with n', m');  sand on u = 0, contours at u = +-0.15, +-0.3",
+  "label": "The standing-wave pattern of a square plate drawn as contours of the displacement, with sand collecting on the lines where the plate stays still while two vibration modes cross-fade.",
+  "params": {
+   "grain": 9000,
+   "cell": 5.5,
+   "stage": 6.5
+  },
+  "file": "m04-chladni.html",
+  "module": "m04-chladni.mjs",
+  "bytes": 23788
+ },
+ {
+  "id": "m05-phyllotaxis",
+  "title": "Phyllotaxis",
+  "T": 12,
+  "still": 0.3,
+  "start": 0.2,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "r = c sqrt(n),  phi = n (137.5078 deg + delta),  delta wanders by a few hundredths of a degree",
+  "label": "Two sunflower spirals of dots, one turning left and one right, whose divergence angle drifts a hair around the golden angle so the spiral arms sweep, merge and change count.",
+  "params": {
+   "na": 1700,
+   "nb": 760
+  },
+  "file": "m05-phyllotaxis.html",
+  "module": "m05-phyllotaxis.mjs",
+  "bytes": 21370
+ },
+ {
+  "id": "m06-hyperbolic",
+  "title": "Hyperbolic tiling",
+  "T": 16,
+  "still": 0.3,
+  "start": 0.25,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "{p,q} tiling of the Poincare disc; geodesics are circle arcs orthogonal to |z|=1; z -> (z + a)/(1 + conj(a) z), a(theta) a closed orbit",
+  "label": "A regular tiling of the hyperbolic plane drawn in the Poincare disc: pentagons and heptagons shrink toward the rim while a moving Mobius shift makes the whole tiling swim like a fisheye.",
+  "params": {
+   "p": 0,
+   "q": 0,
+   "shift": 0.16
+  },
+  "file": "m06-hyperbolic.html",
+  "module": "m06-hyperbolic.mjs",
+  "bytes": 29899
+ },
+ {
+  "id": "m07-apollonian",
+  "title": "Apollonian gasket",
+  "T": 16,
+  "still": 0.3,
+  "start": 0.25,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "k4 = k1 + k2 + k3 +- 2 sqrt(k1k2 + k2k3 + k3k1); circles move by z -> (z - a)/(1 - conj(a) z), a(theta) a closed orbit",
+  "label": "An Apollonian gasket, the packing of tangent circles generated by Descartes' theorem, swirled by a Mobius map that carries every circle to another exact circle and keeps all tangencies.",
+  "params": {
+   "kmax": 520,
+   "swirl": 0.22
+  },
+  "file": "m07-apollonian.html",
+  "module": "m07-apollonian.mjs",
+  "bytes": 25071
+ },
+ {
+  "id": "m08-penrose",
+  "title": "Penrose phason drift",
+  "T": 16,
+  "still": 0.3,
+  "start": 0.25,
+  "dprMax": 1.5,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "x.e_j + g_j in Z, e_j = (cos 2pi j/5, sin 2pi j/5), sum g_j = 0; rhomb vertices sum_m K_m e_m, K_m = ceil(x.e_m + g_m); g_j = g0_j + A cos(theta + 4 pi j/5)",
+  "label": "A Penrose rhomb tiling generated from a pentagrid whose lines slowly slide, so tiles flip in place while the pattern stays a perfect Penrose tiling.",
+  "params": {
+   "edge": 0.058,
+   "a": 0.07,
+   "b": 0.025,
+   "soft": 0.1
+  },
+  "file": "m08-penrose.html",
+  "module": "m08-penrose.mjs",
+  "bytes": 23840
+ },
+ {
+  "id": "m09-roulette",
+  "title": "Roulette rosette",
+  "T": 16,
+  "still": 0.5,
+  "start": 0.3,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "x = (R-r) cos u + d cos(((R-r)/r) u), y = (R-r) sin u - d sin(((R-r)/r) u), R/r = a/b rational; d stepped per copy",
+  "label": "A hypotrochoid drawn ninety times, each copy with the pen offset a little larger and the copy turned a little further, so the copies weave moire rosettes.",
+  "params": {
+   "copies": 90,
+   "pts": 240,
+   "reach": 0.62
+  },
+  "file": "m09-roulette.html",
+  "module": "m09-roulette.mjs",
+  "bytes": 21754
  }
 ]

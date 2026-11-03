@@ -120,6 +120,42 @@ loop trick is part of the maths, not a patch.
 Math pieces follow every other rule (tokens, themes, motion band, grain, engine contract).
 Draw the mathematics honestly: no decorative jitter on the curves themselves.
 
+## 4c. Vormtekeningen series (the article's theme)
+
+The article is about *vormtekenen*, the form drawing the owner did as a child at a Waldorf school:
+continuous forms drawn in one flowing line, lemniscates (the lying eight) and their metamorphoses,
+interlaced knots, plaited borders, rhythmic rows (wave, loop, zigzag), star polygons, mirror
+forms, in layers of coloured pencil. Here it is rebuilt as mathematics in the house style.
+The look of form drawing, translated:
+- **One continuous, closed line.** No visible start or end, ever (the owner flagged an open
+  pen path on M01). A form is a closed curve or a closed braid.
+- **Ribbons.** A stroke is a ribbon of 2 to 4 parallel offset lines (the layered pencil), with
+  slight seeded width and alpha jitter (hand pressure), never one hard line.
+- **Over and under.** Every crossing is resolved: the strand that goes under is cut by a gap
+  (about 2.5 line widths) on both sides of the strand that goes over, alternating along the
+  curve (the interlace rule) or by true depth for a 3D curve. The gap is cut with
+  `destination-out` on a cached transparent marks layer (never a paper-coloured patch, which
+  would erase the grain), then the layer is drawn onto `ctx`.
+- **Colour is allowed here because it has a job:** distinct strands. In `fieldnotes` and `night`
+  the strands use `g.c.accent` (copper), `g.c.cool` (slate blue) and `g.c.third` (sea green), at
+  hair to fine weights; in `mono` they use ink, tint-1 and ink at different alpha. The paper stays
+  warm; the colours are the pencil box, rationed to three.
+- **Mathematical, with the equation in `meta.math`,** and the exercise's Dutch name in `meta.nl`.
+- Motion: slow and continuous like a hand tracing the form again and again, with the usual
+  live evolution (never a visibly repeating loop) and exact loop closure in loop mode.
+
+| # | Piece | Exercise | The mathematics | Motion | Size |
+|---|---|---|---|---|---|
+| V01 | Liggende acht | The lying eight and its metamorphosis (`vormtekenen metamorfose`) | Lissajous / Bernoulli family `x=sin(a t+φ)`, `y=sin(b t)` with `a:b` walking 1:1 → 1:2 → 2:3 → 3:4; the curve closes for every rational ratio; 3 to 4 parallel offset copies at distance `d`, alternating over/under at self-crossings | `φ` and the ratio blend slowly (cross-fade through `a` as a continuous parameter by morphing the Fourier description of the closed curve), the ribbon breathes in width | M |
+| V02 | Knoop | The interlaced knot (Celtic knot, trefoil) | Torus knot `T(p,q)`: `x=(R+r cos qt)cos pt`, `y=(R+r cos qt) sin pt`, `z=r sin qt`, rotated in 3D and projected; real depth gives the over/under; also Lissajous knots; ribbon of 3 strands | The knot turns slowly in 3D (so crossings swap over and under as it rotates) while `(p,q)` blends between trefoil, 5_1, T(3,4) via a smoothly varying `q` | L |
+| V03 | Ritme | The rhythmic border (wave, loop, curtain) | Trochoid `x = t − a sin t`, `y = −a cos t`: `a=0` straight line, `a<1` wave, `a>1` loops; rows with `a` increasing down the page from 0 to about 1.8, each row phase-shifted, drawn as ribbons | `a` of every row breathes, a travelling phase moves along the rows, the loops grow and shrink like a metamorphosis downwards | S |
+| V04 | Vlecht | The plait and the circular interlace | `n`-strand braid closed into a ring (strand `k` at angle `θ_k = θ + 2πk/n`, radius `R + r sin(m θ_k + φ)`, over/under by the sign of the radial derivative), `n = 3..7`, `m` coprime to `n` | The strands flow around the ring, `m` and `φ` drift so the interlace pattern changes character | M |
+| V05 | Roos | The mirror form, rose and star | Rhodonea `r = cos(kθ)` with `k = p/q`, epitrochoids, and star polygons `{n/k}` with dihedral symmetry `D_n`; ribbons shaded by 3 to 5 nested offset copies | `k` and the nested scale breathe, the rose slowly turns inside the star | M |
+| V06 | Rhombenring | The rhombus ring, a hand-drawn mathematical construction (owner references: two pencil drawings of a 12-gon annulus tiled with rhombi in three tones, which reads as a twisted impossible band, with the circle, radial and diagonal construction lines still visible) | Rhombic tiling of a regular `2n`-gon annulus: tiles are rhombi spanned by pairs of the `n` unit vectors at angles `πk/n` (zonogon tiling, a cousin of the Penrose/de Bruijn rhombs); three tone classes by tile orientation give the cube illusion; hatching in three densities (pencil), not fills | The tone assignment travels around the ring so the band seems to twist; occasional hexagon flips (three rhombi rearranging) let the ring morph; construction circle, radii and ticks drawn in `tint-2` and visibly pulse | M |
+
+Pieces from other series that already fit the theme and may be reused in the article: M01
+harmonograph (once closed), M03 epicycles, M09 roulette rosette, F10 string art, F12 metamorphosis.
+
 ## 5. Tokens
 
 | Token | Hex | Use |
@@ -143,6 +179,7 @@ A theme is five colours; a piece reads them from `g.c` and never hard-codes a he
 | `ink` | `#1B1A18` | `#141518` | `#EAE7E0` |
 | `accent` | none | `#A8521F` (copper) | `#D98552` |
 | `cool` | none | `#3F6688` (slate blue) | `#8FB0CF` |
+| `third` | none | `#3D8A6E` (sea green) | `#6CC0A0` |
 
 `fieldnotes` follows the host publication's own system (warm paper, one copper accent, one
 cool data colour). Its `paper` is the host's panel colour, because figures sit on tinted bands there.

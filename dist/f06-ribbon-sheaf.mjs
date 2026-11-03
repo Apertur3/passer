@@ -4,14 +4,14 @@
 // ---- themes ---------------------------------------------------------------
 const THEMES = {
   mono: { paper: '#E4E2DD', ink: '#1B1A18' },
-  fieldnotes: { paper: '#E9E8E3', ink: '#141518', accent: '#A8521F', cool: '#3F6688' },
-  night: { paper: '#121316', ink: '#EAE7E0', accent: '#D98552', cool: '#8FB0CF' },
+  fieldnotes: { paper: '#E9E8E3', ink: '#141518', accent: '#A8521F', cool: '#3F6688', third: '#3D8A6E' },
+  night: { paper: '#121316', ink: '#EAE7E0', accent: '#D98552', cool: '#8FB0CF', third: '#6CC0A0' },
 };
 const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 const mix = (a, b, k) => '#' + rgb(a).map((v, i) => Math.round(v + (rgb(b)[i] - v) * k).toString(16).padStart(2, '0')).join('');
 function theme(name) {
   const t = THEMES[name] || THEMES.mono;
-  return { paper: t.paper, ink: t.ink, accent: t.accent || t.ink, cool: t.cool || t.ink,
+  return { paper: t.paper, ink: t.ink, accent: t.accent || t.ink, cool: t.cool || t.ink, third: t.third || t.ink,
     tint1: mix(t.paper, t.ink, 0.35), tint2: mix(t.paper, t.ink, 0.12) };
 }
 

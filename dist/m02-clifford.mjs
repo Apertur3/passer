@@ -1,0 +1,345 @@
+// genart.js: shared helpers for every piece. Plain ES module, no dependencies.
+// Built into each piece's dist file by scripts/build.mjs (exports are stripped there).
+
+// ---- themes ---------------------------------------------------------------
+const THEMES = {
+  mono: { paper: '#E4E2DD', ink: '#1B1A18' },
+  fieldnotes: { paper: '#E9E8E3', ink: '#141518', accent: '#A8521F', cool: '#3F6688', third: '#3D8A6E' },
+  night: { paper: '#121316', ink: '#EAE7E0', accent: '#D98552', cool: '#8FB0CF', third: '#6CC0A0' },
+};
+const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => '#' + rgb(a).map((v, i) => Math.round(v + (rgb(b)[i] - v) * k).toString(16).padStart(2, '0')).join('');
+function theme(name) {
+  const t = THEMES[name] || THEMES.mono;
+  return { paper: t.paper, ink: t.ink, accent: t.accent || t.ink, cool: t.cool || t.ink, third: t.third || t.ink,
+    tint1: mix(t.paper, t.ink, 0.35), tint2: mix(t.paper, t.ink, 0.12) };
+}
+
+// ---- prng: sfc32 seeded through cyrb128 ------------------------------------
+function cyrb128(s) {
+  let a = 1779033703, b = 3144134277, c = 1013904242, d = 2773480762;
+  for (let i = 0, k; i < s.length; i++) {
+    k = s.charCodeAt(i);
+    a = b ^ Math.imul(a ^ k, 597399067); b = c ^ Math.imul(b ^ k, 2869860233);
+    c = d ^ Math.imul(c ^ k, 951274213); d = a ^ Math.imul(d ^ k, 2716044179);
+  }
+  a = Math.imul(c ^ (a >>> 18), 597399067); b = Math.imul(d ^ (b >>> 22), 2869860233);
+  c = Math.imul(a ^ (c >>> 17), 951274213); d = Math.imul(b ^ (d >>> 19), 2716044179);
+  return [(a ^ b ^ c ^ d) >>> 0, (b ^ a) >>> 0, (c ^ a) >>> 0, (d ^ a) >>> 0];
+}
+function sfc32(a, b, c, d) {
+  return () => {
+    a |= 0; b |= 0; c |= 0; d |= 0;
+    const t = (((a + b) | 0) + d) | 0;
+    d = (d + 1) | 0; a = b ^ (b >>> 9); b = (c + (c << 3)) | 0; c = (c << 21) | (c >>> 11); c = (c + t) | 0;
+    return (t >>> 0) / 4294967296;
+  };
+}
+function prng(seed) { const r = sfc32(...cyrb128(String(seed))); for (let i = 0; i < 12; i++) r(); return r; }
+
+// ---- noise: simplex 4D, loop noise ----------------------------------------
+const PERM = new Uint8Array(512), GRAD = [];
+{ const r = prng('genart-noise'), a = [...Array(256).keys()];
+  for (let i = 255; i > 0; i--) { const j = (r() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+  for (let i = 0; i < 512; i++) PERM[i] = a[i & 255];
+  for (let z = 0; z < 4; z++) for (const p of [-1, 1]) for (const q of [-1, 1]) for (const s of [-1, 1]) { const v = [p, q, s]; v.splice(z, 0, 0); GRAD.push(v); } }
+const F4 = (Math.sqrt(5) - 1) / 4, G4 = (5 - Math.sqrt(5)) / 20;
+function noise4(x, y, z, w) { // about [-1, 1]
+  const s = (x + y + z + w) * F4, c0 = [x, y, z, w].map(v => Math.floor(v + s)), t = (c0[0] + c0[1] + c0[2] + c0[3]) * G4;
+  const X = [x, y, z, w].map((v, i) => v - (c0[i] - t)), rk = [0, 0, 0, 0];
+  for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) X[a] > X[b] ? rk[a]++ : rk[b]++;
+  let n = 0;
+  for (let c = 0; c < 5; c++) {
+    const o = rk.map(v => (c && v >= 4 - c ? 1 : 0)), d = X.map((v, i) => v - o[i] + c * G4);
+    const u = 0.6 - d[0] * d[0] - d[1] * d[1] - d[2] * d[2] - d[3] * d[3];
+    if (u > 0) {
+      const P = (i) => PERM[i & 255], gv = GRAD[P(c0[0] + o[0] + P(c0[1] + o[1] + P(c0[2] + o[2] + P(c0[3] + o[3])))) & 31];
+      n += u * u * u * u * (gv[0] * d[0] + gv[1] * d[1] + gv[2] * d[2] + gv[3] * d[3]);
+    }
+  }
+  return 27 * n;
+}
+const loopNoise = (x, y, th, r) => noise4(x, y, r * Math.cos(th), r * Math.sin(th));
+
+// ---- easing: only these two are allowed ----------------------------------
+const cl = u => Math.min(1, Math.max(0, u));
+const ease = {
+  sine: u => 0.5 - 0.5 * Math.cos(Math.PI * cl(u)),
+  smoother: u => { u = cl(u); return u * u * u * (u * (u * 6 - 15) + 10); },
+  // tempo curve, no rests: a phase that runs between 0.5x and 1.5x of the average speed and never stops
+  rest: p => p + Math.sin(2 * Math.PI * p) / (4 * Math.PI),
+  // breathing amplitude 0..1 over one loop (cosine of the tempo-varied phase)
+  breath: p => 0.5 - 0.5 * Math.cos(2 * Math.PI * ease.rest(p)),
+};
+
+// ---- frame: unit transform, paper, line weights ---------------------------
+const LW = { hair: 0.0006, fine: 0.0012, line: 0.0025, bold: 0.006, mass: 0.02 };
+function frame(ctx, { w, h, seed = 1, theme: tn = 'mono', q = 1 }) {
+  const S = Math.min(w, h), aspect = Math.max(w, h) / S, c = theme(tn), m = aspect > 1.5 ? 0.06 : 0.08;
+  const hw = w / S / 2, hh = h / S / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = c.paper; ctx.fillRect(0, 0, w, h);
+  ctx.setTransform(S, 0, 0, S, w / 2, h / 2); ctx.lineCap = ctx.lineJoin = 'round';
+  const lw = n => Math.max(LW[n], 0.75 / S);
+  // g.q: quality factor in (0, 1]. 1 in tests, exports and ?t= frames; mount's governor lowers it on slow devices.
+  // Heavy pieces multiply their element counts (segments, particles, dots) by g.q, rounding up to at least a sensible minimum.
+  return { S, aspect, w, h, hw, hh, m, bx: hw - m, by: hh - m, c, seed, lw, q,
+    // pen: set stroke width (floored at 0.75 device px, alpha scaled to keep tone), alpha and colour
+    pen(ctx, n, a = 1, col = c.ink) { ctx.lineWidth = lw(n); ctx.globalAlpha = a * Math.min(1, LW[n] / lw(n)); ctx.strokeStyle = col; },
+    rng: salt => prng(seed + ':' + (salt || '')), noise4, ease };
+}
+
+// ---- paper: two static grain tiles + dust (spec: grain; baked under the marks for speed) ----
+const TILES = {}, GK = 2.6; // GK scales the spec alphas: soft-light on bright paper is weak, this lands at std 2 to 5
+function tile(n, seed, amp) {
+  const k = n + seed; if (TILES[k]) return TILES[k];
+  const cv = document.createElement('canvas'); cv.width = cv.height = n;
+  const x = cv.getContext('2d'), im = x.createImageData(n, n), r = prng('grain' + k);
+  for (let i = 0; i < n * n; i++) im.data.set([0, 0, 0, 255].fill(128 + (r() * 2 - 1) * amp, 0, 3), i * 4);
+  x.putImageData(im, 0, 0); return (TILES[k] = cv);
+}
+// The paper (fill, dust, grain) is static, so it is built once per (seed, size, theme) and blitted each frame.
+const PAPER = new Map();
+function paper(g) {
+  const k = [g.seed, g.w, g.h, g.c.paper].join('|');
+  if (PAPER.has(k)) return PAPER.get(k);
+  const cv = document.createElement('canvas'); cv.width = g.w; cv.height = g.h;
+  const ctx = cv.getContext('2d'), r = g.rng('dust'), n = (r() * 41) | 0;
+  ctx.fillStyle = g.c.paper; ctx.fillRect(0, 0, g.w, g.h); ctx.fillStyle = g.c.ink;
+  for (let i = 0; i < n; i++) { ctx.globalAlpha = 0.3 + 0.4 * r(); ctx.beginPath(); ctx.arc(r() * g.w, r() * g.h, g.S * (0.0004 + 0.0008 * r()), 0, 7); ctx.fill(); }
+  const k0 = Math.max(1, g.S / 1000); ctx.globalCompositeOperation = 'soft-light';
+  [[241, 1, 0.10 * GK], [257, 3, 0.06 * GK]].forEach(([sz, m, a]) => {
+    const p = ctx.createPattern(tile(sz, g.seed, 127), 'repeat'); p.setTransform(new DOMMatrix().scale(k0 * m));
+    ctx.globalAlpha = a; ctx.fillStyle = p; ctx.fillRect(0, 0, g.w, g.h);
+  });
+  if (PAPER.size > 6) PAPER.delete(PAPER.keys().next().value);
+  PAPER.set(k, cv); return cv;
+}
+
+// ---- render: the one place that turns (piece, seed, t, size, theme) into pixels ---
+function render(piece, ctx, o) {
+  const g = setup(piece, ctx, o);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(paper(g), 0, 0); ctx.restore();
+  piece.draw(ctx, { seed: o.seed, t: o.t, w: o.w, h: o.h, g });
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+}
+// setup: the frame helper plus phase, noise and live-mode helpers (also used headless by scripts/motion.mjs)
+function setup(piece, ctx, o) {
+  const g = frame(ctx, o), T = piece.meta.T;
+  g.params = { ...piece.meta.params, ...o.params };
+  g.T = T; g.p = (((o.t / T) % 1) + 1) % 1; g.theta = 2 * Math.PI * g.p;
+  g.thetaR = 2 * Math.PI * ease.rest(g.p); // theta with varying tempo (0.5x..1.5x), never stops
+  // Live mode (mount default; exports, ?t= frames, tests and ?loop=1 stay in loop mode, where drift = 0 and everything closes at T):
+  //  g.live   true in live mode.
+  //  g.drift  unbounded slow time in seconds (page clock); 0 in loop mode. Use it for slow envelopes that should never recur.
+  //  g.voice(k) loop mode: k * theta (integer k >= 1, closes). Live: 2*pi*(t/T)*(k + eps_k) unwrapped, with small detunes so
+  //           voices slip against each other and the combination never repeats.
+  //  g.loop(x, y, r, th) loop noise; live: the sampling circle's centre wanders slowly through noise space, so fields never recur.
+  g.live = !!o.live; g.drift = g.live ? o.t : 0;
+  const EPS = [0, 0.0618, 0.1414, 0.0732, 0.0236, 0.1032, 0.0455, 0.0871];
+  g.voice = k => g.live ? 2 * Math.PI * (o.t / T) * (k + (EPS[k - 1] ?? ((k * 0.618034) % 1) * 0.1)) : k * g.theta;
+  const D = [0.37, 0.61, 0.43, 0.29].map(v => v * 0.03 * g.drift);
+  g.loop = (x, y, r, th = g.theta) => g.live ? noise4(x + D[0], y + D[1], r * Math.cos(th) + D[2], r * Math.sin(th) + D[3]) : loopNoise(x, y, th, r);
+  return g;
+}
+
+// ---- clock: rAF loop with pause and resume ------
+function clock(fn) {
+  let raf = 0;
+  const loop = ts => { raf = requestAnimationFrame(loop); fn(ts / 1000); };
+  return { start() { if (!raf) raf = requestAnimationFrame(loop); }, stop() { cancelAnimationFrame(raf); raf = 0; }, get running() { return !!raf; } };
+}
+
+// ---- mount: responsive, pauses offscreen, honours reduced motion -----------
+function mount(el, o) {
+  const { piece } = o, m = piece.meta, seed = o.seed ?? 1, tn = o.theme || 'mono';
+  const [aw, ah] = (o.aspect || m.aspects[0]).split(':').map(Number), ar = aw / ah;
+  const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+  cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', m.label);
+  cv.style.cssText = `display:block;border:0;background:${theme(tn).paper};` + (o.fit ? '' : `width:100%;aspect-ratio:${aw}/${ah}`);
+  el.appendChild(cv);
+  const inst = { canvas: cv, frames: 0, q: 1, qSteps: 0, drawMs: [], destroy }; // drawMs: cost of the last 600 live paints (draw+frame, CPU side)
+  const mql = matchMedia('(prefers-reduced-motion: reduce)'), reduced = () => (o.reduce ?? mql.matches);
+  let vis = true, lastT = 0, lastLive = false, sized = false, key = '';
+  const paint = (t, again, live) => { // static modes skip a repaint of an identical frame
+    const k = cv.width + 'x' + cv.height + ':' + t; if (!sized || (!again && k === key)) return; key = k; lastT = t; lastLive = live; render(piece, ctx, { seed, t, w: cv.width, h: cv.height, theme: tn, params: o.params, q: gov.q, live }); inst.frames++; };
+  // Quality governor (live clock only; never for exports or ?t= frames). Rolling mean over 30 frames of (a) the cost of
+  // draw+frame and (b) the rAF interval. Mean cost > 12 ms or interval > 22 ms: step g.q down one level of [1, .7, .5, .35].
+  // Mean cost < 6 ms and interval < 18 ms for 3 consecutive windows (90 frames): step back up one level.
+  const gov = { q: o.q ?? 1, target: o.q ?? 1, L: [1, 0.7, 0.5, 0.35], i: 0, n: 0, cost: 0, gap: 0, bad: 0, good: 0, last: 0, stepAt: 0 };
+  // Live clock ACCUMULATES: tAcc += clamp(dt, 0, 0.05) * speed, with dt from rAF timestamps and speed = inst.speed * meta.speed.
+  // Changing the speed never changes the phase (no jump), and a stall or a pause becomes a slight slowdown, never a visual jump.
+  // The live t (= tAcc, unbounded) starts at meta.start * T and feeds g.drift / g.voice.
+  inst.speed = o.speed ?? 1; let tAcc = (m.start ?? 0.25) * m.T, lastTs = 0;
+  // Quality governor (live clock only; never for exports or ?t= frames). Windows of 30 frames of (a) the cost of draw+frame and
+  // (b) the rAF interval. Down one level of [1, .7, .5, .35] after 2 consecutive overloaded windows, about 1 s (cost > 10 ms or interval > 22 ms);
+  // up after 3 consecutive good windows (cost < 5 ms and interval < 18 ms) and at least 5 s since the last step. g.q itself eases toward the
+  // target level (about 1 s), so element counts fade rather than pop.
+  const govern = (cost, now) => {
+    const gap = gov.last && now - gov.last < 100 ? now - gov.last : 0; gov.last = now;
+    gov.cost += cost; gov.gap += gap || 16;
+    if (o.q == null) gov.q += (gov.target - gov.q) * 0.06;
+    inst.q = gov.q;
+    if (++gov.n < 30) return;
+    const c = gov.cost / 30, d = gov.gap / 30; gov.n = gov.cost = gov.gap = 0;
+    const bad = c > 10 || d > 22, good = c < 5 && d < 18; gov.bad = bad ? gov.bad + 1 : 0; gov.good = good ? gov.good + 1 : 0;
+    if (gov.bad >= 2 && gov.i < 3 && now - gov.stepAt > 1500) { gov.i++; inst.qSteps++; gov.stepAt = now; gov.bad = 0; } else if (gov.good >= 3 && gov.i > 0 && now - gov.stepAt > 5000) { gov.i--; inst.qSteps++; gov.stepAt = now; gov.good = 0; }
+    gov.target = gov.L[gov.i];
+  };
+  const clk = clock(ts => {
+    const t0 = performance.now(); tAcc += Math.min(0.05, Math.max(0, lastTs ? ts - lastTs : 0)) * inst.speed * (m.speed ?? 1); lastTs = ts;
+    paint(tAcc, 1, !o.loop); const cost = performance.now() - t0; inst.drawMs.push(cost); if (inst.drawMs.length > 600) inst.drawMs.shift(); govern(cost, t0);
+  });
+  function update() {
+    if (o.t != null) { clk.stop(); paint(o.t); }
+    else if (reduced()) { clk.stop(); paint(m.still * m.T); }
+    else if (vis && !document.hidden) { if (!clk.running) lastTs = 0; clk.start(); } else clk.stop();
+    cv.dataset.state = clk.running ? 'running' : 'paused';
+  }
+  const ro = new ResizeObserver(([e]) => {
+    const { width, height } = e.contentRect; if (!width) return;
+    const cw = o.fit ? Math.min(width, height * ar) : width, ch = cw / ar;
+    if (o.fit) { cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; }
+    const liveMode = o.t == null && !reduced() && !o.loop, k = Math.min(devicePixelRatio || 1, liveMode ? (o.dprMax ?? m.dprMax ?? 2) : 2); // meta.dprMax: heavy pieces ask for DPR 1 in live mode
+    let pw = cw * k; if (pw * (pw / ar) > 2.5e6) pw = Math.sqrt(2.5e6 * ar);
+    const nw = Math.round(pw), nh = Math.round(pw / ar); if (cv.width === nw && cv.height === nh && sized) return; // no needless clear
+    cv.width = nw; cv.height = nh; sized = true; update(); if (lastT || !clk.running) paint(lastT, 0, lastLive); // repaint in the same task: no blank frame is ever composited
+  });
+  const io = new IntersectionObserver(es => { vis = es[es.length - 1].isIntersecting; update(); });
+  const onVis = () => update();
+  ro.observe(el); io.observe(cv); document.addEventListener('visibilitychange', onVis); mql.addEventListener('change', onVis);
+  function destroy() { clk.stop(); ro.disconnect(); io.disconnect(); document.removeEventListener('visibilitychange', onVis); mql.removeEventListener('change', onVis); cv.remove(); }
+  return inst;
+}
+
+// ---- exports ---------------------------------------------------------------
+function target(piece, o) {
+  const [aw, ah] = (o.aspect || piece.meta.aspects[0]).split(':').map(Number), [w, h] = String(o.size || 2000).split('x').map(Number);
+  return { w, h: h || Math.round(w * ah / aw) };
+}
+const canvasFor = (piece, o) => { const cv = document.createElement('canvas'); Object.assign(cv, target(piece, o)); return cv; };
+const opts = (piece, o, cv, t) => ({ seed: o.seed ?? 1, theme: o.theme || 'mono', params: o.params, w: cv.width, h: cv.height, t });
+const blobOf = (cv, type = 'image/png') => new Promise(r => cv.toBlob(r, type));
+function exportPNG(piece, o = {}) { // the reduced-motion frame, at full size
+  const cv = canvasFor(piece, o); render(piece, cv.getContext('2d'), opts(piece, o, cv, piece.meta.still * piece.meta.T)); return blobOf(cv);
+}
+async function exportWebm(piece, o = {}, fps = 30) { // one seamless loop, real-time capture
+  const cv = canvasFor(piece, o), ctx = cv.getContext('2d'), track = cv.captureStream(0).getVideoTracks()[0];
+  const rec = new MediaRecorder(new MediaStream([track]), { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 12e6 });
+  const parts = []; rec.ondataavailable = e => parts.push(e.data); rec.start();
+  for (let i = 0; i < piece.meta.T * fps; i++) { render(piece, ctx, opts(piece, o, cv, i / fps)); track.requestFrame(); await new Promise(r => setTimeout(r, 1000 / fps)); }
+  await new Promise(r => { rec.onstop = r; rec.stop(); }); return new Blob(parts, { type: 'video/webm' });
+}
+async function exportFrames(piece, o = {}, fps = 30) { // needs a user gesture for the folder picker
+  const dir = await showDirectoryPicker(), cv = canvasFor(piece, o), ctx = cv.getContext('2d');
+  for (let i = 0; i < piece.meta.T * fps; i++) {
+    render(piece, ctx, opts(piece, o, cv, i / fps));
+    const f = await (await dir.getFileHandle(`frame_${String(i).padStart(5, '0')}.png`, { create: true })).createWritable();
+    await f.write(await blobOf(cv)); await f.close();
+  }
+}
+function save(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e4); }
+
+// M02 Clifford attractor (a plane map iterated, drawn as dust).
+// One rule: the map x' = sin(a y) + c cos(a x), y' = sin(b x) + d cos(b y) folds a lattice of points onto a thin filigree, and density alone gives the tone.
+const meta = {
+  id: 'm02-clifford', title: 'Clifford attractor', T: 12, still: 0.1, start: 0.25, dprMax: 1, aspects: ['4:5', '16:9', '1:1'],
+  math: "x' = sin(a y) + c cos(a x),  y' = sin(b x) + d cos(b y);  (a, b) walk a small circle",
+  label: 'A fixed lattice of points pushed through the Clifford map eight times lands on a folded filigree; the parameters walk a small circle so the cloud unfolds and refolds, with a second, smaller attractor in the cool colour.',
+  // seeds: lattice points per big attractor; eps: radius of the parameter circle; dwell: seconds before the live piece moves on to another attractor
+  params: { seeds: 8000, eps: 0.07, dwell: 50 },
+};
+
+// attractors known to stay rich in a neighbourhood of (a, b): a, b, c, d
+const FAM = [[-1.4, 1.6, 1.0, 0.7], [1.7, 1.7, 0.6, 1.2], [1.5, -1.8, 1.6, 0.9], [-1.7, 1.8, -1.9, -0.4], [-1.8, -2.0, -0.5, -0.9], [1.7, 1.3, -0.1, -1.21]];
+const TAU = Math.PI * 2, K = 8, KEEP = 5; // iterations per lattice point; the last KEEP iterates are drawn
+const SC = { w: 0, h: 0, cv: null, ctx: null, img: null, u32: null, cA: null, cB: null, hit: null, nh: 0, sx: null, sy: null, box: {} };
+const ALPHA = [0.4, 0.55]; // alpha of one hit: big attractor, small attractor
+const TB = new Float64Array(4097), INV = 4096 / TAU; for (let i = 0; i <= 4096; i++) TB[i] = Math.sin(i / INV);
+const sn = v => { const u = (v + 25.2) * INV, i = u | 0, f = u - i; return TB[i & 4095] * (1 - f) + TB[(i & 4095) + 1] * f; }; // sine from a table, |v| < 25, error 3e-7
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+
+function lattice(N) { // R2 low-discrepancy sequence on [-1, 1]^2, built once
+  if (SC.sx && SC.sx.length >= N) return;
+  SC.sx = new Float32Array(N); SC.sy = new Float32Array(N);
+  for (let i = 0; i < N; i++) { SC.sx[i] = ((i + 0.5) * 0.7548776662466927 % 1) * 2 - 1; SC.sy[i] = ((i + 0.5) * 0.5698402909980532 % 1) * 2 - 1; }
+}
+// where the iterates of an attractor fall: centre and half-size, measured once per family member and kept fixed so the picture never pulses
+function box(k) {
+  if (SC.box[k]) return SC.box[k];
+  const [a, b, c, d] = FAM[k], B = 1 + Math.max(Math.abs(c), Math.abs(d)); let x0 = 9, x1 = -9, y0 = 9, y1 = -9; const xs = [], ys = [];
+  for (let i = 0; i < 4000; i++) {
+    let x = SC.sx[i] * B, y = SC.sy[i] * B;
+    for (let j = 0; j < K; j++) { const nx = Math.sin(a * y) + c * Math.cos(a * x); y = Math.sin(b * x) + d * Math.cos(b * y); x = nx; }
+    xs.push(x); ys.push(y);
+  }
+  xs.sort((p, q) => p - q); ys.sort((p, q) => p - q);
+  x0 = xs[40]; x1 = xs[3959]; y0 = ys[40]; y1 = ys[3959];
+  return (SC.box[k] = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, hx: (x1 - x0) / 2 * 1.04, hy: (y1 - y0) / 2 * 1.04 });
+}
+
+function draw(ctx, { g }) {
+  const P = g.params, q = Math.min(1, g.q ?? 1), w = g.w, h = g.h, S = g.S, N = Math.round(P.seeds * q), live = g.live;
+  lattice(P.seeds);
+  const sm = g.ease.smoother;
+  // layers: which family member, where, how big, how much of its lattice shows (live: a slow hand-over to another attractor)
+  const pick = (r, k) => { r = g.rng('pick' + k); return Math.floor(r() * FAM.length); };
+  const layers = [], aw = g.bx, ah = g.by * 0.85, small = 0.46;
+  const addLayer = (kind, member, amount) => { if (amount > 0.004) layers.push({ kind, member, amount }); };
+  if (live) {
+    for (const kind of [0, 1]) {
+      const s = g.drift / P.dwell + kind * 0.43, k = Math.floor(s), f = s - k, wgt = sm((f - 0.75) / 0.25);
+      let m0 = pick(0, kind * 100 + k), m1 = pick(0, kind * 100 + k + 1); if (m1 === m0) m1 = (m1 + 1) % FAM.length;
+      addLayer(kind, m0, 1 - wgt); addLayer(kind, m1, wgt);
+    }
+  } else { addLayer(0, pick(0, 0), 1); addLayer(1, (pick(0, 0) + 2 + (pick(0, 1) % 3)) % FAM.length, 1); }
+  const pts = typeof document === 'undefined'; // headless motion test: no canvas, report a sample of dots instead
+  if (!pts && (SC.w !== w || SC.h !== h)) {
+    SC.w = w; SC.h = h; SC.cv = document.createElement('canvas'); SC.cv.width = w; SC.cv.height = h; SC.ctx = SC.cv.getContext('2d');
+    SC.img = SC.ctx.createImageData(w, h); SC.u32 = new Uint32Array(SC.img.data.buffer); SC.cA = new Uint8Array(w * h); SC.cB = new Uint8Array(w * h); SC.hit = new Int32Array(w * h);
+  }
+  const { cA, cB, hit, u32 } = SC, k = Math.max(1, Math.round(S / 900)); let nh = 0, minx = w, miny = h, maxx = 0, maxy = 0;
+  const e = P.eps;
+  for (const L of layers) {
+    const [a0, b0, c, d] = FAM[L.member], bx = box(L.member), kind = L.kind;
+    // the parameter point walks a small circle (loop: one turn per loop; live: two voices that slip against each other)
+    const ph = kind ? g.voice(2) + 1.7 : g.voice(1), pb = kind ? g.voice(1) + 4 : g.voice(2) + 0.6;
+    const a = a0 + e * Math.cos(ph) * (kind ? 0.8 : 1), b = b0 + e * Math.sin(ph) * (kind ? 0.8 : 1) + 0.4 * e * Math.sin(pb);
+    const Bm = 1 + Math.max(Math.abs(c), Math.abs(d)), s0 = Math.min(aw / bx.hx, ah / bx.hy), s1 = Math.min(aw / bx.hy, ah / bx.hx), rot = s1 > s0, sc = Math.max(s0, s1) * (kind ? small : 1); // turn the attractor a quarter if that fills the page better
+    const ox = kind ? 0.35 * g.bx : 0, oy = kind ? 0.42 * g.by : -0.08 * g.by; // the small one sits low and right, half overlapping
+    const n = Math.round(N * L.amount * (kind ? 0.45 : 1)), grid = kind ? cB : cA;
+    for (let i = 0; i < n; i++) {
+      let x = SC.sx[i] * Bm, y = SC.sy[i] * Bm;
+      for (let j = 0; j < K; j++) {
+        const nx = sn(a * y) + c * sn(a * x + 1.5707963); y = sn(b * x) + d * sn(b * y + 1.5707963); x = nx;
+        if (j < K - KEEP) continue;
+        const dx = x - bx.cx, dy = y - bx.cy, X = (rot ? -dy : dx) * sc + ox, Y = (rot ? dx : dy) * sc + oy;
+        if (pts) { if (i % 50 === 0) ctx.rect(X, Y, 0, 0); continue; }
+        const ix = Math.round(w / 2 + X * S - k / 2), iy = Math.round(h / 2 + Y * S - k / 2);
+        if (ix < 0 || iy < 0 || ix + k > w || iy + k > h) continue;
+        for (let yy = 0; yy < k; yy++) for (let xx = 0; xx < k; xx++) {
+          const o = (iy + yy) * w + ix + xx;
+          if (!(cA[o] | cB[o])) hit[nh++] = o;
+          if (grid[o] < 255) grid[o]++;
+        }
+        if (ix < minx) minx = ix; if (iy < miny) miny = iy; if (ix + k > maxx) maxx = ix + k; if (iy + k > maxy) maxy = iy + k;
+      }
+    }
+  }
+  if (pts || !nh) return;
+  // resolve counts to ink: alpha = 1 - (1 - a1)^hits, colour from the share of each attractor, then blit the dirty box
+  const ink = hex(g.c.ink), cool = hex(g.c.cool), lutA = new Uint8Array(64), lutB = new Uint8Array(64);
+  for (let i = 1; i < 64; i++) { lutA[i] = 255 * (1 - Math.pow(1 - ALPHA[0], i)); lutB[i] = 255 * (1 - Math.pow(1 - ALPHA[1], i)); }
+  for (let i = 0; i < nh; i++) {
+    const o = hit[i], a = Math.min(63, cA[o]), b = Math.min(63, cB[o]), aa = lutA[a], ab = lutB[b], al = 255 - (255 - aa) * (255 - ab) / 255, t = ab > aa ? 1 : 0;
+    u32[o] = (al << 24) | (((ink[2] + (cool[2] - ink[2]) * t) | 0) << 16) | (((ink[1] + (cool[1] - ink[1]) * t) | 0) << 8) | ((ink[0] + (cool[0] - ink[0]) * t) | 0);
+  }
+  const dw = maxx - minx, dh = maxy - miny;
+  SC.ctx.putImageData(SC.img, 0, 0, minx, miny, dw, dh);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.drawImage(SC.cv, minx, miny, dw, dh, minx, miny, dw, dh); ctx.restore();
+  for (let i = 0; i < nh; i++) { const o = hit[i]; cA[o] = cB[o] = 0; u32[o] = 0; }
+}
+
+const mountPiece = (el, o) => mount(el, { piece: { meta, draw }, ...o });
+(window.genart ||= {}).mount ??= mountPiece;
+export { meta,draw,render,theme,exportPNG,exportWebm,exportFrames, mountPiece as mount };

@@ -3,25 +3,33 @@
 export const meta = {
   id: 'f04-tesseract', title: 'Tesseract', T: 16, still: 0.5, start: 0.25, aspects: ['4:5', '16:9', '1:1'],
   label: 'A hypercube turning in four dimensions, projected to a fan of fine lines where only a seeded subset of its edges is drawn.',
-  // keep: share of the 32 edges that are drawn; copies: echoes of the cube along the turn; spread: turn between echoes (rad);
+  // keep: share of the 24 square faces that are drawn; copies: echoes of the cube along the turn; spread: turn between echoes (rad);
   // depth: eye distance in 4D
-  params: { keep: 0.72, copies: 12, spread: 0.05, depth: 6 },
+  params: { keep: 0.5, copies: 12, spread: 0.05, depth: 6 },
 };
 
 const V = [], E = []; // 16 vertices (+-1)^4 and the 32 edges between neighbours
 for (let i = 0; i < 16; i++) V.push([i & 1, (i >> 1) & 1, (i >> 2) & 1, (i >> 3) & 1].map(b => b * 2 - 1));
 for (let i = 0; i < 16; i++) for (let b = 0; b < 4; b++) if (!(i & (1 << b))) E.push([i, i | (1 << b)]);
 
-// the edge a half-turn in the xw plane carries edge e onto; the subset is chosen per pair so the loop closes exactly
-const IMG = E.map(([u, v]) => E.findIndex(([a, b]) => (a === (u ^ 9) && b === (v ^ 9)) || (a === (v ^ 9) && b === (u ^ 9))));
+// the 24 square faces: two free axes (a, b), the other two fixed; corners listed round the square
+const FACES = [], EI = {}; E.forEach(([u, v], i) => (EI[u * 16 + v] = i));
+for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) for (let m = 0; m < 16; m++) {
+  if (m & (1 << a) || m & (1 << b)) continue;
+  FACES.push([m, m | (1 << a), m | (1 << a) | (1 << b), m | (1 << b)]);
+}
+// the face a half-turn in the xw plane (vertex i -> i ^ 9) carries each face onto; the subset is chosen per pair so the loop closes exactly
+const key = f => f.slice().sort((x, y) => x - y).join();
+const IMG = FACES.map(f => FACES.findIndex(h => key(h) === key(f.map(v => v ^ 9))));
 const voice = (g, k) => (g.voice ? g.voice(k) : k * g.theta); // independent phase k: integer harmonic in loop mode, detuned live
 // rotate a point in the plane (i, j) by angle a
 const rot = (p, i, j, a) => { const c = Math.cos(a), s = Math.sin(a), u = p[i], v = p[j]; p[i] = u * c - v * s; p[j] = u * s + v * c; };
 
 export function draw(ctx, { g }) {
   const P = g.params, r = g.rng('edges'), n = P.copies;
-  const draw0 = E.map(() => r() < P.keep), on = E.map((_, i) => draw0[Math.min(i, IMG[i])]); // the seeded subset, shared by every echo
-  const pick = on.map((v, i) => (v ? i : -1)).filter(i => i >= 0);
+  const draw0 = FACES.map(() => r() < P.keep), used = new Set(); // the seeded faces, shared by every echo; their edges are drawn once, so every line ends in a corner
+  FACES.forEach((f, i) => { if (draw0[Math.min(i, IMG[i])]) f.forEach((v, k) => { const w = f[(k + 1) % 4]; used.add(EI[Math.min(v, w) * 16 + Math.max(v, w)]); }); });
+  const pick = [...used].sort((x, y) => x - y);
   const view = [r() * 0.6 + 0.3, r() * 0.6 + 0.4]; // fixed tilt of the whole figure
   const a1 = voice(g, 1) / 2, a2 = voice(g, 2) / 2, sp = P.spread * (1 + 0.5 * Math.sin(voice(g, 3))), dp = P.depth * (1 + 0.15 * Math.sin(voice(g, 4))); // planes xw and zw turn at 1:2 (a half and a full turn per loop; the subset is symmetric under the half turn); echo spacing and eye distance breathe on their own voices
   const sc = Math.min(g.bx, g.by) * 0.4, pt = new Float64Array(16 * 2);
