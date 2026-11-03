@@ -115,7 +115,7 @@
   },
   "file": "f12-metamorphosis.html",
   "module": "f12-metamorphosis.mjs",
-  "bytes": 23600
+  "bytes": 25567
  },
  {
   "id": "m01-harmonograph",
@@ -153,13 +153,13 @@
   "math": "dx/dt = sin y - b x,  dy/dt = sin z - b y,  dz/dt = sin x - b z;  b drifts between 0.1846 and 0.1878",
   "label": "Thousands of hairline filaments flowing along one Thomas strange attractor at a steady, gentle speed, while the damping parameter b drifts slowly so the scroll folds into new shapes inside itself.",
   "params": {
-   "n": 2400,
+   "n": 2000,
    "epoch": 5,
    "fade": 3.5
   },
   "file": "m02-clifford.html",
   "module": "m02-clifford.mjs",
-  "bytes": 28308
+  "bytes": 29288
  },
  {
   "id": "m04-chladni",
@@ -181,7 +181,28 @@
   },
   "file": "m04-chladni.html",
   "module": "m04-chladni.mjs",
-  "bytes": 23847
+  "bytes": 25841
+ },
+ {
+  "id": "m05-phyllotaxis",
+  "title": "Phyllotaxis",
+  "T": 12,
+  "still": 0.3,
+  "start": 0.2,
+  "aspects": [
+   "4:5",
+   "16:9",
+   "1:1"
+  ],
+  "math": "r = c sqrt(n),  phi = n (137.5078 deg + delta),  delta wanders by a few hundredths of a degree",
+  "label": "A large sunflower of fine halftone dots whose divergence angle drifts slowly around the golden angle, so the spiral arms sweep, merge and change count, with a clear patch of open paper that wanders through the dots.",
+  "params": {
+   "na": 2000,
+   "fill": 0.82
+  },
+  "file": "m05-phyllotaxis.html",
+  "module": "m05-phyllotaxis.mjs",
+  "bytes": 21483
  },
  {
   "id": "m06-hyperbolic",
@@ -195,7 +216,7 @@
    "1:1"
   ],
   "math": "{p,q} tiling of the Poincare disc; geodesics are circle arcs orthogonal to |z|=1; z -> (z + a)/(1 + conj(a) z), a(theta) a closed orbit",
-  "label": "A regular tiling of the hyperbolic plane drawn in the Poincare disc: pentagons and heptagons shrink toward the rim while a moving Mobius shift makes the whole tiling swim like a fisheye.",
+  "label": "A regular tiling of the hyperbolic plane drawn in the Poincare disc: triangles or squares shrink toward the rim while a moving Mobius shift makes the whole tiling swim like a fisheye.",
   "params": {
    "p": 0,
    "q": 0,
@@ -203,7 +224,7 @@
   },
   "file": "m06-hyperbolic.html",
   "module": "m06-hyperbolic.mjs",
-  "bytes": 29958
+  "bytes": 29955
  },
  {
   "id": "m07-apollonian",
@@ -310,11 +331,12 @@
   "label": "A field of pencil-hatched cubes in three tones, wound into a logarithmic spiral that contains a smaller twisted copy of itself and zooms endlessly inward, after the Droste effect and Escher's Print Gallery.",
   "params": {
    "arms": 0,
-   "drift": 1
+   "drift": 1,
+   "bleed": 0
   },
   "file": "v07-droste.html",
   "module": "v07-droste.mjs",
-  "bytes": 25056
+  "bytes": 25188
  },
  {
   "id": "v08-kubus",

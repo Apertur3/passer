@@ -247,10 +247,10 @@ const meta = {
   math: 'dx/dt = sin y - b x,  dy/dt = sin z - b y,  dz/dt = sin x - b z;  b drifts between 0.1846 and 0.1878',
   label: 'Thousands of hairline filaments flowing along one Thomas strange attractor at a steady, gentle speed, while the damping parameter b drifts slowly so the scroll folds into new shapes inside itself.',
   // n: filaments (at most); epoch: seconds between epochs in live mode; fade: seconds of the overlap between neighbouring epochs
-  params: { n: 2400, epoch: 5, fade: 3.5 },
+  params: { n: 2000, epoch: 5, fade: 3.5 },
 };
 
-const TAU = Math.PI * 2, RL = 240000, H = 0.1, DSN = 0.0174, SP = 100, TK = 10, ST = 3, CP = Math.cos(0.55), SPN = Math.sin(0.55); // RL raw RK4 steps; DSN resample step (in attractor radii); SP samples between neighbours; trail of TK slots, ST samples apart
+const TAU = Math.PI * 2, RL = 240000, H = 0.1, DSN = 0.0174, SP = 100, TK = 14, ST = 2, CP = Math.cos(0.55), SPN = Math.sin(0.55); // RL raw RK4 steps; DSN resample step (in attractor radii); SP samples between neighbours; trail of TK slots, ST samples apart
 const EP = new Map(), POOL = [], BUF = { n: 0, a: null, f: null, np: null };
 const bOf = e => 0.1862 + 0.0010 * Math.sin(0.3 * e) + 0.0006 * Math.sin(0.17 * e + 1); // the slow path of b, inside one chaotic window (0.1846 to 0.1878; long runs show periodic windows just outside)
 const K1 = [0, 0, 0], K2 = [0, 0, 0], K3 = [0, 0, 0], K4 = [0, 0, 0];
@@ -296,19 +296,24 @@ function work(ep, budget) { // advance the epoch by about `budget` samples: raw 
     const c = [sx / RL, sy / RL, sz / RL], d = []; let X = 0; ep.c = c;
     for (let i = 0; i < RL; i += 29) d.push(Math.hypot(A[i * 3] - c[0], A[i * 3 + 1] - c[1], A[i * 3 + 2] - c[2])); d.sort((p, q) => p - q); ep.R = d[Math.floor(d.length * 0.92)];
     for (const yw of [0, 1.5708]) { d.length = 0; for (let i = 0; i < RL; i += 17) { const x = A[i * 3] - c[0], y = A[i * 3 + 1] - c[1], z = A[i * 3 + 2] - c[2], u = x * Math.cos(yw) - y * Math.sin(yw), v = x * Math.sin(yw) + y * Math.cos(yw); d.push(Math.hypot(u, v * CP - z * SPN)); } d.sort((p, q) => p - q); X = Math.max(X, d[Math.floor(d.length * 0.95)]); }
-    ep.X = X * 1.08; ep.stage = 1; ep.j = 1; ep.cum = 0; ep.nxt = 0;
-    ep.px = (A[0] - c[0]) / ep.X; ep.py = ((A[1] - c[1]) * CP - (A[2] - c[2]) * SPN) / ep.X; ep.res.set(A.subarray(0, 3), 0); ep.M = 1; ep.nxt = 1;
+    ep.X = X * 1.08; ep.stage = 1; ep.j = 2; ep.cum = 0; ep.nxt = 0;
+    ep.px = (A[3] - c[0]) / ep.X; ep.py = ((A[4] - c[1]) * CP - (A[5] - c[2]) * SPN) / ep.X; ep.res.set(A.subarray(3, 6), 0); ep.M = 1; ep.nxt = 1;
   }
-  const c = ep.c, X = ep.X, cap = ep.res.length / 3 - 1, R = ep.res; let { px, py, cum, nxt, M } = ep; const end = Math.min(RL, ep.j + budget);
+  const c = ep.c, X = ep.X, cap = ep.res.length / 3 - 1, R = ep.res; let { px, py, cum, nxt, M } = ep; const end = Math.min(RL - 1, ep.j + budget);
   for (let j = ep.j; j < end; j++) { // equal steps of arc length in the reference view (yaw 0, mean pitch), measured in attractor radii
     const x = A[j * 3], y = A[j * 3 + 1], z = A[j * 3 + 2], qx = (x - c[0]) / X, qy = ((y - c[1]) * CP - (z - c[2]) * SPN) / X, l = Math.hypot(qx - px, qy - py);
-    while (nxt * DSN <= cum + l && M < cap) { const t = (nxt * DSN - cum) / l; R[M * 3] = A[j * 3 - 3] + t * (x - A[j * 3 - 3]); R[M * 3 + 1] = A[j * 3 - 2] + t * (y - A[j * 3 - 2]); R[M * 3 + 2] = A[j * 3 - 1] + t * (z - A[j * 3 - 1]); M++; nxt++; }
+    while (nxt * DSN <= cum + l && M < cap) { // Catmull-Rom between the two raw samples, so the resampled curve has no corners
+      const t = (nxt * DSN - cum) / l, t2 = t * t, t3 = t2 * t;
+      for (let k = 0; k < 3; k++) { const p0 = A[j * 3 - 6 + k], p1 = A[j * 3 - 3 + k], p2 = A[j * 3 + k], p3 = A[j * 3 + 3 + k]; R[M * 3 + k] = 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (3 * p1 - p0 - 3 * p2 + p3) * t3); }
+      M++; nxt++;
+    }
     cum += l; px = qx; py = qy;
   }
   Object.assign(ep, { px, py, cum, nxt, M, j: end });
-  if (end >= RL) { ep.Np = Math.max(1, Math.floor(M / SP)); ep.L = ep.Np * SP; ep.done = true; }
+  if (end >= RL - 1) { ep.Np = Math.max(1, Math.floor(M / SP)); ep.L = ep.Np * SP; ep.done = true; }
 }
 
+const pump = (ep, ms) => { const t0 = performance.now(); do work(ep, 1500); while (!ep.done && performance.now() - t0 < ms); }; // background build, at most about `ms` of work per frame
 const finish = ep => { while (!ep.done) work(ep, 1e9); }; // build a whole epoch now (a rebuild after a periodic window loops once more)
 function draw(ctx, { g }) {
   const P = g.params, live = g.live, q = Math.min(1, g.q ?? 1);
@@ -317,8 +322,9 @@ function draw(ctx, { g }) {
   if (!live) { ea = epoch(g, 'A', 0.185); eb = epoch(g, 'B', 0.1875); wb = 0.5 - 0.5 * Math.cos(g.theta); finish(ea); finish(eb); }
   else {
     const t = g.drift, e = Math.floor(t / P.epoch); wb = g.ease.smoother((t - e * P.epoch - (P.epoch - P.fade)) / P.fade);
-    ea = epoch(g, 'e' + e, bOf(e)); finish(ea); eb = epoch(g, 'e' + (e + 1), bOf(e + 1)); if (wb > 0) finish(eb); else work(eb, 12000);
-    const e3 = epoch(g, 'e' + (e + 2), bOf(e + 2)); if (eb.done) work(e3, 12000); // the next epochs are built a slice per frame, ahead of time
+    ea = epoch(g, 'e' + e, bOf(e)); if (!ea.done) { pump(ea, 4); if (!ea.done) return; } // the first epoch builds over a few frames (paper only meanwhile) instead of one long stall
+    eb = epoch(g, 'e' + (e + 1), bOf(e + 1)); if (!eb.done) { pump(eb, wb > 0 ? 8 : 2.5); if (!eb.done) wb = 0; } // a late next epoch only delays the cross-fade
+    const e3 = epoch(g, 'e' + (e + 2), bOf(e + 2)); if (eb.done) pump(e3, 2); // the epochs after are built a slice per frame, ahead of time
   }
   const W = TK + 1, stride = W * 2, N0 = P.n;
   if (BUF.n < N0) { BUF.n = N0; BUF.a = new Float32Array(N0 * stride); BUF.f = new Float32Array(N0); BUF.np = new Uint8Array(N0); }
@@ -344,11 +350,13 @@ function draw(ctx, { g }) {
       np[cnt] = nk; cnt++;
     }
     g.pen(ctx, 'hair', 1, g.c.ink); ctx.lineCap = 'butt';
-    for (const [s0, s1, al] of [[6, TK, 0.09], [3, 6, 0.18], [0, 3, 0.36]]) { // hairlines by age: the alpha rises towards the head
+    for (const [s0, s1, al] of [[9, TK, 0.09], [4, 9, 0.18], [0, 4, 0.36]]) { // hairlines by age: the alpha rises towards the head
       ctx.globalAlpha = al * w; ctx.beginPath();
       for (let p = 0; p < cnt; p++) {
         const o = p * stride, e = Math.min(s1, np[p] - 1); if (e <= s0) continue; ctx.moveTo(Bf[o + s0 * 2], Bf[o + s0 * 2 + 1]);
-        for (let k = s0 + 1; k <= e; k++) ctx.lineTo(Bf[o + k * 2], Bf[o + k * 2 + 1]);
+        if (s0 >= 9) { for (let k = s0 + 1; k <= e; k++) ctx.lineTo(Bf[o + k * 2], Bf[o + k * 2 + 1]); continue; } // the faintest part stays a cheap polyline
+        for (let k = s0 + 1; k < e; k++) ctx.quadraticCurveTo(Bf[o + k * 2], Bf[o + k * 2 + 1], (Bf[o + k * 2] + Bf[o + k * 2 + 2]) / 2, (Bf[o + k * 2 + 1] + Bf[o + k * 2 + 3]) / 2); // midpoint smoothing: every sample is a control point
+        ctx.lineTo(Bf[o + e * 2], Bf[o + e * 2 + 1]);
       }
       ctx.stroke();
     }

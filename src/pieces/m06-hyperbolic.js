@@ -4,7 +4,7 @@
 export const meta = {
   id: 'm06-hyperbolic', title: 'Hyperbolic tiling', T: 16, still: 0.3, start: 0.25, aspects: ['4:5', '16:9', '1:1'],
   math: '{p,q} tiling of the Poincare disc; geodesics are circle arcs orthogonal to |z|=1; z -> (z + a)/(1 + conj(a) z), a(theta) a closed orbit',
-  label: 'A regular tiling of the hyperbolic plane drawn in the Poincare disc: pentagons and heptagons shrink toward the rim while a moving Mobius shift makes the whole tiling swim like a fisheye.',
+  label: 'A regular tiling of the hyperbolic plane drawn in the Poincare disc: triangles or squares shrink toward the rim while a moving Mobius shift makes the whole tiling swim like a fisheye.',
   // p, q: Schlafli symbol (0 = chosen by seed among {3,8} {4,6}; q even keeps the checkerboard); shift: size of the Mobius orbit
   params: { p: 0, q: 0, shift: 0.16 },
 };

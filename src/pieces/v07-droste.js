@@ -6,8 +6,8 @@ export const meta = {
   id: 'v07-droste', title: 'Droste', nl: 'Spiraal in zichzelf', T: 24, still: 0.3, start: 0.25, aspects: ['4:5', '16:9', '1:1'],
   math: 'z = exp(w), w = G (u1 + rho u2), G = 2 pi i / (n1 + n2 rho); the cube pattern is periodic in u, shifted by tau (k1,k2), tau = t/T, so tau = 1 is the identity',
   label: 'A field of pencil-hatched cubes in three tones, wound into a logarithmic spiral that contains a smaller twisted copy of itself and zooms endlessly inward, after the Droste effect and Escher\'s Print Gallery.',
-  // arms: which (n1, n2) winding, 0 = by seed; drift: size of the slow live drift of the skew
-  params: { arms: 0, drift: 1 },
+  // arms: which (n1, n2) winding, 0 = by seed; drift: size of the slow live drift of the skew; bleed: 1 draws the spiral across the whole canvas (no disc, no rim)
+  params: { arms: 0, drift: 1, bleed: 0 },
 };
 
 const PAIRS = [[9, 5], [11, 4], [10, 7], [8, 3]], H3 = 0.8660254, TAU = 2 * Math.PI;
@@ -19,7 +19,7 @@ const NL = [3, 8, 16], sm = u => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u))
 
 export function draw(ctx, { seed, g }) {
   const P = g.params, r = g.rng('v07'), pair = PAIRS[P.arms ? (P.arms - 1) % PAIRS.length : Math.floor(r() * PAIRS.length)], n1 = pair[0], n2 = pair[1];
-  const R = Math.min(g.bx, g.by), S = g.S, d = g.drift * P.drift;
+  const R = P.bleed ? Math.hypot(g.hw, g.hh) : Math.min(g.bx, g.by), S = g.S, d = g.drift * P.drift;
   // skew rho = |rho| e^{i alpha}: drifts on three slow incommensurate voices (zero at d = 0, so loop mode is the canonical cube lattice)
   const al = Math.PI / 3 + 0.11 * Math.sin(0.019 * d) + 0.05 * Math.sin(0.0113 * d + 1), md = 1 + 0.045 * Math.sin(0.0141 * d) + 0.03 * Math.sin(0.0071 * d + 2);
   const rr = md * Math.cos(al), ri = md * Math.sin(al), dn = (n1 + n2 * rr) ** 2 + (n2 * ri) ** 2;
@@ -70,5 +70,5 @@ export function draw(ctx, { seed, g }) {
   }
     const sty = [['fine', 0.9, g.c.ink], ['hair', 0.55, g.c.ink], ['hair', 0.8, g.c.ink], ['fine', 0.8, g.c.ink]];
   for (let k = 0; k < 4; k++) for (let b = 0; b < NB; b++) { g.pen(ctx, sty[k][0], sty[k][1] * (b + 1) / NB, sty[k][2]); ctx.stroke(PATH[k][b]); }
-  g.pen(ctx, 'fine', 1, g.c.ink); ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();
+  if (!P.bleed) { g.pen(ctx, 'fine', 1, g.c.ink); ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke(); }
 }
